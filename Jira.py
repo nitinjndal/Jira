@@ -8,7 +8,7 @@ import json
 
 
 import datetime as dt
-from jira import JIRA
+import jira
 
 ## import shutil
 #from sympy import primenu
@@ -22,10 +22,11 @@ from jira import JIRA
 debug=True
 
 ConsoleLogFile = open("./console.log", "w")
-def DebugMsg(msg1,msg2="",printmsg=True,ForcePrint=False):
+def DebugMsg(msg1,msg2="",printmsg=True,ForcePrint=False,print_dt=True):
     if (debug or ForcePrint) and printmsg:
         if not (((str(msg1) == "" )or (msg1 is None)) and ((str(msg2) == "") or (msg2 is None))) :
-            print(dt.datetime.now().strftime("%c"),end=" " )
+            if print_dt:
+                print(dt.datetime.now().strftime("%c"),end=" " )
             ConsoleLogFile.write(dt.datetime.now().strftime("%c") + " ")
         print(msg1,end=" " )
         ConsoleLogFile.write(str(msg1) + " ")
@@ -38,22 +39,24 @@ def DebugMsg(msg1,msg2="",printmsg=True,ForcePrint=False):
 
         ConsoleLogFile.flush()
 
-def DebugMsg2(msg1,msg2=None,printmsg=True):
-    DebugMsg(msg1,msg2,printmsg)
+def DebugMsg2(msg1,msg2=None,printmsg=True,ForcePrint=False,print_dt=True):
+    DebugMsg(msg1,msg2,printmsg,ForcePrint,print_dt)
 
-def DebugMsg3(msg1,msg2=None,printmsg=True):
-    DebugMsg(msg1,msg2,printmsg)
+def DebugMsg3(msg1,msg2=None,printmsg=True,ForcePrint=False,print_dt=True):
+    DebugMsg(msg1,msg2,printmsg,ForcePrint,print_dt)
 
-def Info(msg1,msg2=None,printmsg=True):
-    DebugMsg(msg1,msg2,printmsg,ForcePrint=True)
-class myJira:
+def Info(msg1,msg2=None,printmsg=True,ForcePrint=False,print_dt=True):
+    DebugMsg(msg1,msg2,printmsg,True,print_dt)
 
+class Jira:
 
-    def __init__(self, keywords,regexs=[],commentedBy=[],appendInJquery="",customJquery=None,getregexs=[]):
+    def __init__(self, keywords,regexs=[],commentedBy=[],appendInJquery="",customJquery=None,getregexs=[],credentialsFile=None):
 
-        self.read_credentials("./PrivateInfo.json")
-
-        self.jira_cloud = JIRA(basic_auth=(self.username, self.token), options={'server': self.jira_server})
+        if credentialsFile is None:
+            credentialsFile= "~/.Jira.json"
+        credentialsFile=os.path.abspath(os.path.expanduser(os.path.expandvars(credentialsFile)))
+        self.read_credentials(credentialsFile)
+        self.jira_cloud = jira.JIRA(basic_auth=(self.username, self.token), options={'server': self.jira_server})
         self.expand_comments = False
         self.keywords=keywords
         self.__get_regexs=getregexs
@@ -65,9 +68,9 @@ class myJira:
     def read_credentials(self,filename):
         with open (filename) as f:
             creds=json.load(f)
-        self.token=creds['credentials']['token']
-        self.jira_server=creds['credentials']['jira_server']
-        self.username=creds['credentials']['username']
+        self.token=creds['JiraCredentials']['token']
+        self.jira_server=creds['JiraCredentials']['jira_server']
+        self.username=creds['JiraCredentials']['username']
 
     def create_jql(self,customJquery=None, appendInJquery=""):
        # keywords=["abc", "def"]
@@ -83,7 +86,10 @@ class myJira:
                 i+=1
             if re.match(".*\S",appendInJquery) and (not (re.match("^\s*AND",appendInJquery) or re.match("^\s*OR",appendInJquery))):
                 appendInJquery=" AND " + appendInJquery
-
+            
+            jql_query+= " OR ("
+            jql_query+= "(comment ~ \"" + " ".join(self.keywords) + "\" OR text ~ \"" + " ".join(self.keywords) + "\")"
+            jql_query+= ")"
             jql_query += appendInJquery
             jql_query +=" ORDER BY updatedDate DESC"
         return jql_query
@@ -119,6 +125,7 @@ class myJira:
             if s3:
                 Info(issue.permalink(),s3.group(0))
 
+        found=False
         for pattern in (regexs + keywords):
             found=False
             for comment in comments:
@@ -138,7 +145,6 @@ class myJira:
         return found
 
     def get_issues(self,jql_query):
-
         Info("Jql_query = " + jql_query)
         max_results_per_iter=100
         start_at=0
@@ -158,22 +164,25 @@ class myJira:
                 raise ValueError("Too many results found (" + str(len(issues)) + "). Please add more filters in jql query")
 
         Info("Number of issues : " + str(len(issues)))
-
-        
         return issues
     
     def printIssues(self,issues):
-        issues=issues.copy()
-        issues.reverse
-        for issue in issues:
-            Info(issue.permalink() + "\t" + issue.fields.summary)
-            if self.expand_comments:
-                for comment in self.jira_cloud.comments(issue):
-                    Info("####################################################################################")
-                    Info("Commented by " + str(comment.author) + " on " + comment.created)
-                    Info("####################################################################################")
-                    Info(comment.body)
-                Info("\n#####################################################\n")
+        if len(issues)>0:
+            issues=issues.copy()
+            issues.reverse
+            Info("\n\n################## Jira Issues ###################################",print_dt=False)
+            for issue in issues:
+                Info(issue.permalink() + "\t" + issue.fields.summary,print_dt=False)
+                if self.expand_comments:
+                    for comment in self.jira_cloud.comments(issue):
+                        Info("####################################################################################",print_dt=False)
+                        Info("Commented by " + str(comment.author) + " on " + comment.created,print_dt=False)
+                        Info("####################################################################################",print_dt=False)
+                        Info(comment.body,print_dt=False)
+                    Info("\n#####################################################\n",print_dt=False)
+            Info("################## Jira Issues Ends ###################################\n\n",print_dt=False)
+            sys.stdout.flush()
+            
 
 
     def get_matching_issues(self,issues,regexs):
@@ -182,26 +191,29 @@ class myJira:
         for issue in issues:
             if self.search_regexp(issue,regexs):
                 matched_issues.append(issue)
+                if len(matched_issues) >  50:
+                    self.printIssues(matched_issues)
+                    raise ValueError("Too many results found (" + str(len(issues)) + "). Only 1st 50 results shown. Please add more filters in jql query or add regex to reduce the results")
             else:
                 not_matched_issues.append(issue)
 
         if len(matched_issues)>0 :
             if len(not_matched_issues)>0 and len(matched_issues)< 5:
                 Info("####################################################################################")
-                Info("###### Issues not exactly matching the search query ###########")
+                Info("###### Jira issues not exactly matching the search query ###########")
                 Info("####################################################################################")
         else:
             Info("")
-            Info("###### No issues matched the exact regex. ###########")
+            Info("###### No Jira issues matched the exact regex. ###########")
         if len(matched_issues)< 5:
             self.printIssues(not_matched_issues)
         elif len(matched_issues) >  50:
             self.printIssues(matched_issues)
-            raise ValueError("Too many results found (" + str(len(issues)) + "). Please add more filters in jql query or add regex")
+            raise ValueError("Too many results found (" + str(len(issues)) + "). Only 1st 50 results shown. Please add more filters in jql query or add regex to reduce the results")
 
         if len(matched_issues)>0:
             Info("####################################################################################")
-            Info("###### Issues matching the search query ###### ")
+            Info("###### Jira issues matching the search query ###### ")
             Info("####################################################################################")
             self.printIssues(matched_issues)
 
@@ -218,7 +230,7 @@ if __name__ == "__main__":
         "-getregex", metavar="regex", required=False, help="DashboardDataDir",nargs='+', default=[])
 
     argparser.add_argument(
-        "-commentedBy", metavar="Nitin",  default="", required=False,
+        "-commentedBy", metavar="UserName",  default="", required=False,
         help="Find tickets which are commented by persons. Pass comma separated names in double quotes")
 
     argparser.add_argument(
@@ -242,13 +254,15 @@ if __name__ == "__main__":
 #    debug=args.debug
     commentedBy=list(filter(None,args.commentedBy.split(",")))
     ## used filter to remove empty contents from list
-    myJira(args.keywords,
+
+
+    Jira(args.keywords,
      commentedBy=commentedBy,
      regexs=args.regex,
      appendInJquery=args.appendInJquery,
      customJquery=args.customJquery,
      getregexs=args.getregex
-     )
+    )
 
 
-    ConsoleLogFile.close()
+    
