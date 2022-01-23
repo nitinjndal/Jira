@@ -13,13 +13,43 @@ import requests
 import  atexit
 import urllib.parse
 import argparse
-
+import datetime as dt
 
 
 logging.basicConfig(format='%(asctime)s %(message)s', datefmt='%m/%d/%Y %I:%M:%S %p')
 
+debug=False
+
+ConsoleLogFile = open("./console.log", "w")
+def DebugMsg(msg1,msg2="",printmsg=True,ForcePrint=False,print_dt=True):
+    if (debug or ForcePrint) and printmsg:
+        if not (((str(msg1) == "" )or (msg1 is None)) and ((str(msg2) == "") or (msg2 is None))) :
+            if print_dt:
+                print(dt.datetime.now().strftime("%c"),end=" " )
+            ConsoleLogFile.write(dt.datetime.now().strftime("%c") + " ")
+        print(msg1,end=" " )
+        ConsoleLogFile.write(str(msg1) + " ")
+        if msg2 is not None:
+            print(msg2)
+            ConsoleLogFile.write(str(msg2) + "\n")
+        else:
+            print("")
+            ConsoleLogFile.write("\n")
+
+        sys.stdout.flush()
+        ConsoleLogFile.flush()
+
+def DebugMsg2(msg1,msg2=None,printmsg=True,ForcePrint=False,print_dt=True):
+    DebugMsg(msg1,msg2,printmsg,ForcePrint,print_dt)
+
+def DebugMsg3(msg1,msg2=None,printmsg=True,ForcePrint=False,print_dt=True):
+    DebugMsg(msg1,msg2,printmsg,ForcePrint,print_dt)
+
+def Info(msg1,msg2=None,printmsg=True,ForcePrint=False,print_dt=True):
+    DebugMsg(msg1,msg2,printmsg,True,print_dt)
+
 class SharepointSearch():
-    def __init__(self,keywords,credentialsFile=None):
+    def __init__(self,keywords,credentialsFile=None,SearchSharepoint=True,SearchFindit=True):
         if credentialsFile is None:
             credentialsFile= "~/.SharePointSearch.json"
         self.tokenCacheFile=os.path.abspath(os.path.expanduser(os.path.expandvars(credentialsFile)))
@@ -28,8 +58,10 @@ class SharepointSearch():
         self.setTokenCache()
         atexit.register(self.updateTokenCache)
         keywords=self.combine_keywords(keywords)
-        self.search_sharepoint(scope=["Sites.Read.All"],keywords=keywords)
-        self.search_findit(scope=["https://armh.sharepoint.com/Sites.Read.All"], keywords=keywords)
+        if SearchSharepoint:
+            self.search_sharepoint(scope=["Sites.Read.All"],keywords=keywords)
+        if SearchFindit:
+            self.search_findit(scope=["https://armh.sharepoint.com/Sites.Read.All"], keywords=keywords)
     
     def combine_keywords(self,keywords):
         tmp=[]
@@ -57,7 +89,7 @@ class SharepointSearch():
             with open (credentialsFile) as o:
                 creds=json.load(o)
             self.client_id=creds['MicrosoftCredentials']['client_id']
-            self.client_secret=creds['MicrosoftCredentials']['client_secret']
+            #self.client_secret=creds['MicrosoftCredentials']['client_secret']
             self.tenant_id=creds['MicrosoftCredentials']['tenant_id']
         else:
             logging.error("Credentials File %s does not exist" % credentialsFile)
@@ -203,7 +235,8 @@ class SharepointSearch():
                 if "sharepoint.com" not in tmp and tmp not in urls:
                     urls.append(tmp)
             if len(urls)>0:
-                pprint.pprint(urls)
+                for url in urls:
+                    Info(url,print_dt=False)
         else:
             print(graph_data.content)
 

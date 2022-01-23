@@ -19,7 +19,7 @@ import jira
 ## from difflib import SequenceMatcher
 ## import Common.local_functions as LF
 
-debug=True
+debug=False
 
 ConsoleLogFile = open("./console.log", "w")
 def DebugMsg(msg1,msg2="",printmsg=True,ForcePrint=False,print_dt=True):
@@ -37,6 +37,7 @@ def DebugMsg(msg1,msg2="",printmsg=True,ForcePrint=False,print_dt=True):
             print("")
             ConsoleLogFile.write("\n")
 
+        sys.stdout.flush()
         ConsoleLogFile.flush()
 
 def DebugMsg2(msg1,msg2=None,printmsg=True,ForcePrint=False,print_dt=True):
@@ -50,17 +51,22 @@ def Info(msg1,msg2=None,printmsg=True,ForcePrint=False,print_dt=True):
 
 class Jira:
 
-    def __init__(self, keywords,regexs=[],commentedBy=[],appendInJquery="",customJquery=None,getregexs=[],credentialsFile=None):
+    def __init__(self, keywords,regexs=[],commentedBy=[],appendInJquery="",customJquery=None,getregexs=[],credentialsFile=None,credentialsHead=None):
 
         if credentialsFile is None:
             credentialsFile= "~/.Jira.json"
+
+        self.credentialsHead="JiraCloudCredentials"
+        if credentialsHead is not None:
+            self.credentialsHead=credentialsHead
+
         credentialsFile=os.path.abspath(os.path.expanduser(os.path.expandvars(credentialsFile)))
         self.read_credentials(credentialsFile)
-        self.jira_cloud = jira.JIRA(basic_auth=(self.username, self.token), options={'server': self.jira_server})
+        self.jira_cloud = jira.JIRA(basic_auth=(self.username, self.token), options={'server': self.server})
         self.expand_comments = False
         self.keywords=keywords
         self.__get_regexs=getregexs
-        Info("commentedBy=",commentedBy)
+        DebugMsg("commentedBy=",commentedBy)
         jql_query=self.create_jql(customJquery,appendInJquery)
         issues=self.get_issues(jql_query)
         self.get_matching_issues(issues,regexs)
@@ -68,9 +74,9 @@ class Jira:
     def read_credentials(self,filename):
         with open (filename) as f:
             creds=json.load(f)
-        self.token=creds['JiraCredentials']['token']
-        self.jira_server=creds['JiraCredentials']['jira_server']
-        self.username=creds['JiraCredentials']['username']
+        self.token=creds[self.credentialsHead]['token']
+        self.server=creds[self.credentialsHead]['server']
+        self.username=creds[self.credentialsHead]['username']
 
     def create_jql(self,customJquery=None, appendInJquery=""):
        # keywords=["abc", "def"]
@@ -104,48 +110,50 @@ class Jira:
             if re.search("\s",keyword) or re.search("\W",keyword):
                 keywords.append(keyword)
         
-        comments=self.jira_cloud.comments(issue)
-
-        for pattern in self.__get_regexs:
-#            Info("Pattern", pattern)
+        found=True
+        if len(self.__get_regexs + regexs + keywords )> 0: 
             found=False
-            for comment in comments:
-                s1=re.search(pattern,comment.body,re.IGNORECASE)
-                if s1:
-                    Info(issue.permalink(),s1.group(0))
-            
-            s2=None
-            s3=None
-            if (issue.fields.description is not None):
-                s2= re.search(pattern,issue.fields.description,re.IGNORECASE)
-            if (issue.fields.summary is not None):
-                s3= re.search(pattern,issue.fields.summary,re.IGNORECASE)
-            if s2:
-                Info(issue.permalink(),s2.group(0))
-            if s3:
-                Info(issue.permalink(),s3.group(0))
+            comments=self.jira_cloud.comments(issue)
 
-        found=False
-        for pattern in (regexs + keywords):
-            found=False
-            for comment in comments:
-                if re.search(pattern,comment.body,re.IGNORECASE):
+            for pattern in self.__get_regexs:
+    #            DebugMsg("Pattern", pattern)
+                found=False
+                for comment in comments:
+                    s1=re.search(pattern,comment.body,re.IGNORECASE)
+                    if s1:
+                        DebugMsg(issue.permalink(),s1.group(0))
+                
+                s2=None
+                s3=None
+                if (issue.fields.description is not None):
+                    s2= re.search(pattern,issue.fields.description,re.IGNORECASE)
+                if (issue.fields.summary is not None):
+                    s3= re.search(pattern,issue.fields.summary,re.IGNORECASE)
+                if s2:
+                    DebugMsg(issue.permalink(),s2.group(0))
+                if s3:
+                    DebugMsg(issue.permalink(),s3.group(0))
+
+            for pattern in (regexs + keywords):
+                found=False
+                for comment in comments:
+                    if re.search(pattern,comment.body,re.IGNORECASE):
+                        found=True
+
+                
+                if ( found 
+                    or ((issue.fields.description is not None) and re.search(pattern,issue.fields.description,re.IGNORECASE))
+                    or ((issue.fields.summary is not None) and re.search(pattern,issue.fields.summary,re.IGNORECASE))
+                    ) :
                     found=True
 
-            
-            if ( found 
-                or ((issue.fields.description is not None) and re.search(pattern,issue.fields.description,re.IGNORECASE))
-                or ((issue.fields.summary is not None) and re.search(pattern,issue.fields.summary,re.IGNORECASE))
-                ) :
-                found=True
-
-            if not found:
-                return False
+                if not found:
+                    return False
 
         return found
 
     def get_issues(self,jql_query):
-        Info("Jql_query = " + jql_query)
+        DebugMsg("Jql_query = " + jql_query)
         max_results_per_iter=100
         start_at=0
         issues=[]
@@ -163,24 +171,24 @@ class Jira:
                 self.printIssues(issues)
                 raise ValueError("Too many results found (" + str(len(issues)) + "). Please add more filters in jql query")
 
-        Info("Number of issues : " + str(len(issues)))
+        DebugMsg("Number of issues : " + str(len(issues)))
         return issues
     
     def printIssues(self,issues):
         if len(issues)>0:
             issues=issues.copy()
             issues.reverse
-            Info("\n\n################## Jira Issues ###################################",print_dt=False)
+            DebugMsg("\n\n################## Jira Issues ###################################",print_dt=False)
             for issue in issues:
                 Info(issue.permalink() + "\t" + issue.fields.summary,print_dt=False)
                 if self.expand_comments:
                     for comment in self.jira_cloud.comments(issue):
-                        Info("####################################################################################",print_dt=False)
-                        Info("Commented by " + str(comment.author) + " on " + comment.created,print_dt=False)
-                        Info("####################################################################################",print_dt=False)
-                        Info(comment.body,print_dt=False)
-                    Info("\n#####################################################\n",print_dt=False)
-            Info("################## Jira Issues Ends ###################################\n\n",print_dt=False)
+                        DebugMsg("####################################################################################",print_dt=False)
+                        DebugMsg("Commented by " + str(comment.author) + " on " + comment.created,print_dt=False)
+                        DebugMsg("####################################################################################",print_dt=False)
+                        DebugMsg(comment.body,print_dt=False)
+                    DebugMsg("\n#####################################################\n",print_dt=False)
+            DebugMsg("################## Jira Issues Ends ###################################\n\n",print_dt=False)
             sys.stdout.flush()
             
 
@@ -199,12 +207,13 @@ class Jira:
 
         if len(matched_issues)>0 :
             if len(not_matched_issues)>0 and len(matched_issues)< 5:
-                Info("####################################################################################")
-                Info("###### Jira issues not exactly matching the search query ###########")
-                Info("####################################################################################")
-        else:
-            Info("")
-            Info("###### No Jira issues matched the exact regex. ###########")
+                DebugMsg("####################################################################################")
+                DebugMsg("###### Jira issues not exactly matching the search query ###########")
+                DebugMsg("####################################################################################")
+        elif len(issues)>0:
+            DebugMsg("")
+            DebugMsg("###### No Jira issues matched the exact regex. ###########")
+
         if len(matched_issues)< 5:
             self.printIssues(not_matched_issues)
         elif len(matched_issues) >  50:
@@ -212,9 +221,9 @@ class Jira:
             raise ValueError("Too many results found (" + str(len(issues)) + "). Only 1st 50 results shown. Please add more filters in jql query or add regex to reduce the results")
 
         if len(matched_issues)>0:
-            Info("####################################################################################")
-            Info("###### Jira issues matching the search query ###### ")
-            Info("####################################################################################")
+            DebugMsg("####################################################################################")
+            DebugMsg("###### Jira issues matching the search query ###### ")
+            DebugMsg("####################################################################################")
             self.printIssues(matched_issues)
 
 
