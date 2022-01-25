@@ -10,6 +10,7 @@ import json
 import datetime as dt
 import atlassian 
 import pprint
+from  Logging import *
 
 ## import shutil
 #from sympy import primenu
@@ -19,36 +20,6 @@ import pprint
 ## import tarfile
 ## from difflib import SequenceMatcher
 ## import Common.local_functions as LF
-
-debug=False
-
-ConsoleLogFile = open("./console.log", "w")
-def DebugMsg(msg1,msg2="",printmsg=True,ForcePrint=False,print_dt=True):
-    if (debug or ForcePrint) and printmsg:
-        if not (((str(msg1) == "" )or (msg1 is None)) and ((str(msg2) == "") or (msg2 is None))) :
-            if print_dt:
-                print(dt.datetime.now().strftime("%c"),end=" " )
-            ConsoleLogFile.write(dt.datetime.now().strftime("%c") + " ")
-        print(msg1,end=" " )
-        ConsoleLogFile.write(str(msg1) + " ")
-        if msg2 is not None:
-            print(msg2)
-            ConsoleLogFile.write(str(msg2) + "\n")
-        else:
-            print("")
-            ConsoleLogFile.write("\n")
-
-        sys.stdout.flush()
-        ConsoleLogFile.flush()
-
-def DebugMsg2(msg1,msg2=None,printmsg=True,ForcePrint=False,print_dt=True):
-    DebugMsg(msg1,msg2,printmsg,ForcePrint,print_dt)
-
-def DebugMsg3(msg1,msg2=None,printmsg=True,ForcePrint=False,print_dt=True):
-    DebugMsg(msg1,msg2,printmsg,ForcePrint,print_dt)
-
-def Info(msg1,msg2=None,printmsg=True,ForcePrint=False,print_dt=True):
-    DebugMsg(msg1,msg2,printmsg,True,print_dt)
 
 class Confluence:
 
@@ -269,7 +240,7 @@ if __name__ == "__main__":
 
     args = argparser.parse_args()
     # print(args)
-    #    debug=args.debug
+    Logging.debug=args.debug
     commentedBy=list(filter(None,args.commentedBy.split(",")))
     ## used filter to remove empty contents from list
 

@@ -14,39 +14,14 @@ import  atexit
 import urllib.parse
 import argparse
 import datetime as dt
+from Logging import *
 
 
-logging.basicConfig(format='%(asctime)s %(message)s', datefmt='%m/%d/%Y %I:%M:%S %p')
 
-debug=False
 
-ConsoleLogFile = open("./console.log", "w")
-def DebugMsg(msg1,msg2="",printmsg=True,ForcePrint=False,print_dt=True):
-    if (debug or ForcePrint) and printmsg:
-        if not (((str(msg1) == "" )or (msg1 is None)) and ((str(msg2) == "") or (msg2 is None))) :
-            if print_dt:
-                print(dt.datetime.now().strftime("%c"),end=" " )
-            ConsoleLogFile.write(dt.datetime.now().strftime("%c") + " ")
-        print(msg1,end=" " )
-        ConsoleLogFile.write(str(msg1) + " ")
-        if msg2 is not None:
-            print(msg2)
-            ConsoleLogFile.write(str(msg2) + "\n")
-        else:
-            print("")
-            ConsoleLogFile.write("\n")
 
-        sys.stdout.flush()
-        ConsoleLogFile.flush()
 
-def DebugMsg2(msg1,msg2=None,printmsg=True,ForcePrint=False,print_dt=True):
-    DebugMsg(msg1,msg2,printmsg,ForcePrint,print_dt)
 
-def DebugMsg3(msg1,msg2=None,printmsg=True,ForcePrint=False,print_dt=True):
-    DebugMsg(msg1,msg2,printmsg,ForcePrint,print_dt)
-
-def Info(msg1,msg2=None,printmsg=True,ForcePrint=False,print_dt=True):
-    DebugMsg(msg1,msg2,printmsg,True,print_dt)
 
 class SharepointSearch():
     def __init__(self,keywords,credentialsFile=None,SearchSharepoint=True,SearchFindit=True):
@@ -92,7 +67,7 @@ class SharepointSearch():
             #self.client_secret=creds['MicrosoftCredentials']['client_secret']
             self.tenant_id=creds['MicrosoftCredentials']['tenant_id']
         else:
-            logging.error("Credentials File %s does not exist" % credentialsFile)
+            DebugMsg("Credentials File %s does not exist" % credentialsFile)
 
     def setTokenCache(self):
         self.__cache= msal.SerializableTokenCache()
@@ -126,7 +101,6 @@ class SharepointSearch():
         self.token_info = None
         accounts = app.get_accounts()
         if accounts:
-#            logging.info("Account(s) exists in cache, probably with token too. Let's try.")
 #            print("Pick the account you want to use to proceed:")
             if len(accounts)>1:
                 for a in accounts:
@@ -137,7 +111,7 @@ class SharepointSearch():
             self.token_info  = app.acquire_token_silent(scope, account=chosen)
 
         if not self.token_info :
-            logging.info("No suitable token exists in cache. Let's get a new one from AAD.")
+            DebugMsg("No suitable token exists in cache. Let's get a new one from AAD.")
 
             flow = app.initiate_device_flow(scopes=scope)
             if "user_code" not in flow:
@@ -327,6 +301,7 @@ if __name__ == "__main__":
 
     args = argparser.parse_args()
     # print(args)
+    Logging.debug=args.debug
     SharepointSearch(keywords=args.keywords,credentialsFile=args.credentialsFile)
 
 

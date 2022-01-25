@@ -13,6 +13,7 @@ import Jira
 import SharepointSearch
 import Confluence
 import threading
+from  Logging import *
 # %%
 ## import shutil
 #from sympy import primenu
@@ -22,36 +23,6 @@ import threading
 ## import tarfile
 ## from difflib import SequenceMatcher
 ## import Common.local_functions as LF
-
-debug=True
-
-ConsoleLogFile = open("./console.log", "w")
-def DebugMsg(msg1,msg2="",printmsg=True,ForcePrint=False):
-    if (debug or ForcePrint) and printmsg:
-        if not (((str(msg1) == "" )or (msg1 is None)) and ((str(msg2) == "") or (msg2 is None))) :
-            print(dt.datetime.now().strftime("%c"),end=" " )
-            ConsoleLogFile.write(dt.datetime.now().strftime("%c") + " ")
-        print(msg1,end=" " )
-        ConsoleLogFile.write(str(msg1) + " ")
-        if msg2 is not None:
-            print(msg2)
-            ConsoleLogFile.write(str(msg2) + "\n")
-        else:
-            print("")
-            ConsoleLogFile.write("\n")
-
-        sys.stdout.flush()
-        sys.stderr.flush()
-        ConsoleLogFile.flush()
-
-def DebugMsg2(msg1,msg2=None,printmsg=True):
-    DebugMsg(msg1,msg2,printmsg)
-
-def DebugMsg3(msg1,msg2=None,printmsg=True):
-    DebugMsg(msg1,msg2,printmsg)
-
-def Info(msg1,msg2=None,printmsg=True):
-    DebugMsg(msg1,msg2,printmsg,ForcePrint=True)
 
 
 class UniSearch:
@@ -118,6 +89,7 @@ class UniSearch:
 
 if __name__ == "__main__":
 
+    ConsoleLogFile = open("./console.log", "w")
     argparser = argparse.ArgumentParser(description="Jira")
     argparser.add_argument('keywords', nargs='+')
     argparser.add_argument(
@@ -156,9 +128,9 @@ if __name__ == "__main__":
 
     args = argparser.parse_args()
     # print(args)
-    #    debug=args.debug
     commentedBy=list(filter(None,args.commentedBy.split(",")))
     ## used filter to remove empty contents from list
+    Logging.debug=args.debug
     UniSearch(
     keywords=args.keywords,
      commentedBy=commentedBy,
