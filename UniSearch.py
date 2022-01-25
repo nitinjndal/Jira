@@ -13,7 +13,7 @@ import Jira
 import SharepointSearch
 import Confluence
 import threading
-from  Logging import *
+from Shared import Logging,DebugMsg,Info
 # %%
 ## import shutil
 #from sympy import primenu
@@ -39,7 +39,8 @@ class UniSearch:
                                           appendInJquery=appendInJquery,
                                           customJquery=customJquery,
                                           getregexs=getregexs,
-                                          credentialsFile=credentialsFile))
+                                          credentialsFile=credentialsFile,
+                                          credentialsHead="JiraCloudCredentials"))
 
         SharePointThread = threading.Thread(target=SharepointSearch.SharepointSearch,
                               kwargs=dict(keywords=keywords,

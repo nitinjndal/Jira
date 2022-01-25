@@ -9,7 +9,9 @@ import json
 
 import datetime as dt
 import jira
-from Logging import *
+from Shared import Logging,DebugMsg,Info
+import requests
+import Shared
 
 ## import shutil
 #from sympy import primenu
@@ -30,11 +32,16 @@ class Jira:
             credentialsFile= "~/.Jira.json"
 
         self.credentialsHead="JiraCloudCredentials"
+        self.credentialsHead="JiraCredentials"
         if credentialsHead is not None:
             self.credentialsHead=credentialsHead
 
         credentialsFile=os.path.abspath(os.path.expanduser(os.path.expandvars(credentialsFile)))
         self.read_credentials(credentialsFile)
+        rep=requests.get(self.server)
+        if not Shared.isVpnConnected(self.server):
+            return
+
         self.jira_cloud = jira.JIRA(basic_auth=(self.username, self.token), options={'server': self.server})
         self.expand_comments = False
         self.keywords=keywords

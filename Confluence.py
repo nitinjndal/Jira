@@ -1,6 +1,5 @@
 #! /usr/bin/env python
 #
-import sys
 import os
 import re
 import argparse
@@ -9,17 +8,10 @@ import json
 
 import datetime as dt
 import atlassian 
-import pprint
-from  Logging import *
+from Shared import Logging,DebugMsg,Info
+import Shared
 
-## import shutil
-#from sympy import primenu
-## import pandas as pd
-## import time
-## import numpy as np
-## import tarfile
-## from difflib import SequenceMatcher
-## import Common.local_functions as LF
+
 
 class Confluence:
 
@@ -40,6 +32,8 @@ class Confluence:
                 "access_token": self.token
             }
         }
+        if not Shared.isVpnConnected(self.server):
+            return
         self.confluence = atlassian.Confluence(url=self.server,oauth2=oauth2_dict)
 
         self.keywords=keywords

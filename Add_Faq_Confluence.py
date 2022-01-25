@@ -7,11 +7,12 @@ import re
 import argparse
 import json
 import urllib.parse
+import Shared
 
 
 import datetime as dt
 import atlassian 
-from  Logging import *
+from Shared import Logging,DebugMsg,Info
 
 # %%
 #confluence.get_all_spaces(start=0, limit=5, expand=None)
@@ -80,12 +81,14 @@ class AddFaqConfluence:
         PageId_FAQs=924951844
         PageId_test1=924952128
         page_body="<br /><h1>" + self.htmlspecialchars(heading.strip())+ "</h1><p>" +  self.htmlspecialchars(paragraph.strip()) + "</p>" 
+        if not Shared.isVpnConnected(self.server):
+            return
         page_info=self.confluence.get_page_by_id( PageId_test1, expand=None, status=None, version=None)
         page_url=self.server + page_info['space']['_links']['webui']  + "/" + urllib.parse.quote_plus( page_info['title'] )
         page_title=page_info['title']
         added=self.confluence.append_page(PageId_test1, page_title ,page_body, parent_id=PageId_FAQs, type='page', representation='storage', minor_edit=False)
         if 'id' in added:
-            print("Added in " + page_url)
+            Info("Appended in " + page_url)
         return added
 
     def htmlspecialchars(self,text):

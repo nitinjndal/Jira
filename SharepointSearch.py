@@ -14,13 +14,7 @@ import  atexit
 import urllib.parse
 import argparse
 import datetime as dt
-from Logging import *
-
-
-
-
-
-
+from Shared import Logging,DebugMsg,Info
 
 
 class SharepointSearch():
