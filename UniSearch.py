@@ -13,7 +13,7 @@ import Jira
 import SharepointSearch
 import Confluence
 import threading
-from Shared import Logging,DebugMsg,Info
+from Shared import Logging,DebugMsg,Info,Shared
 # %%
 ## import shutil
 #from sympy import primenu
@@ -27,61 +27,75 @@ from Shared import Logging,DebugMsg,Info
 
 class UniSearch:
 
-    def __init__(self, keywords,regexs=[],commentedBy=[],appendInJquery="",appendInCquery="",customJquery=None,customCquery=None,getregexs=[]):
-
-        credentialsFile= "~/.UniSearch.json"
-        credentialsFile=os.path.abspath(os.path.expanduser(os.path.expandvars(credentialsFile)))
-
-        JiraCloudThread = threading.Thread(target=Jira.Jira,
-                              kwargs=dict(keywords=keywords,
-                                          commentedBy=commentedBy,
-                                          regexs=regexs,
-                                          appendInJquery=appendInJquery,
-                                          customJquery=customJquery,
-                                          getregexs=getregexs,
-                                          credentialsFile=credentialsFile,
-                                          credentialsHead="JiraCloudCredentials"))
-
-        SharePointThread = threading.Thread(target=SharepointSearch.SharepointSearch,
-                              kwargs=dict(keywords=keywords,
-                                          credentialsFile=credentialsFile,
-                                          SearchSharepoint=True,
-                                          SearchFindit=False))
-
-        FinditThread = threading.Thread(target=SharepointSearch.SharepointSearch,
-                              kwargs=dict(keywords=keywords,
-                                          credentialsFile=credentialsFile,
-                                          SearchSharepoint=False,
-                                          SearchFindit=True))
+	def __init__(self, keywords,regexs=[],commentedBy=[],appendInJquery="",appendInCquery="",customJquery=None,customCquery=None,getregexs=[]):
 
 
+		Info("Started ")
+		begin_time = dt.datetime.now()
+		defaultsFile = Shared.defaultsFilePath
+		credentialsHead = "UniSearch"
 
-        JiraThread = threading.Thread(target=Jira.Jira,
-                                      kwargs=dict(
-                                          keywords=keywords,
-                                          commentedBy=commentedBy,
-                                          regexs=regexs,
-                                          appendInJquery=appendInJquery,
-                                          customJquery=customJquery,
-                                          getregexs=getregexs,
-                                          credentialsFile=credentialsFile,
-                                          credentialsHead="JiraCredentials"))
+		self.defaults=Shared.read_defaults(defaultsFile,credentialsHead)
+		credentialsFile = Shared.abs_path(self.defaults["CredentialsFile"])
 
-        ConfluenceThread = threading.Thread(
-            target=Confluence.Confluence,
-            kwargs=dict(keywords=args.keywords,
-                        commentedBy=commentedBy,
-                        regexs=regexs,
-                        appendInCquery=appendInCquery,
-                        customCquery=customCquery,
-                        getregexs=getregexs,
-                        credentialsFile=credentialsFile))
+		JiraCloudThread = threading.Thread(target=Jira.Jira,
+							  kwargs=dict(keywords=keywords,
+										  commentedBy=commentedBy,
+										  regexs=regexs,
+										  appendInJquery=appendInJquery,
+										  customJquery=customJquery,
+										  getregexs=getregexs,
+										  credentialsFile=credentialsFile,
+										  credentialsHead="JiraCloud"))
 
-        JiraThread.start()
-        JiraCloudThread.start()
-        SharePointThread.start()
-        FinditThread.start()
-        ConfluenceThread.start()
+		SharePointThread = threading.Thread(target=SharepointSearch.SharepointSearch,
+							  kwargs=dict(keywords=keywords,
+										  credentialsFile=credentialsFile,
+										  SearchSharepoint=True,
+										  SearchFindit=False))
+
+		FinditThread = threading.Thread(target=SharepointSearch.SharepointSearch,
+							  kwargs=dict(keywords=keywords,
+										  credentialsFile=credentialsFile,
+										  SearchSharepoint=False,
+										  SearchFindit=True))
+
+
+
+		JiraThread = threading.Thread(target=Jira.Jira,
+									  kwargs=dict(
+										  keywords=keywords,
+										  commentedBy=commentedBy,
+										  regexs=regexs,
+										  appendInJquery=appendInJquery,
+										  customJquery=customJquery,
+										  getregexs=getregexs,
+										  credentialsFile=credentialsFile,
+										  credentialsHead="Jira"))
+
+		ConfluenceThread = threading.Thread(
+			target=Confluence.Confluence,
+			kwargs=dict(keywords=args.keywords,
+						commentedBy=commentedBy,
+						regexs=regexs,
+						appendInCquery=appendInCquery,
+						customCquery=customCquery,
+						getregexs=getregexs,
+						credentialsFile=credentialsFile))
+
+		JiraThread.start()
+		JiraCloudThread.start()
+		SharePointThread.start()
+		FinditThread.start()
+		ConfluenceThread.start()
+
+		JiraThread.join()
+		JiraCloudThread.join()
+		SharePointThread.join()
+		FinditThread.join()
+		ConfluenceThread.join()
+		Info("  COmpleted")
+		print(dt.datetime.now() - begin_time)
 
 
 
@@ -90,59 +104,59 @@ class UniSearch:
 
 if __name__ == "__main__":
 
-    ConsoleLogFile = open("./console.log", "w")
-    argparser = argparse.ArgumentParser(description="Jira")
-    argparser.add_argument('keywords', nargs='+')
-    argparser.add_argument(
-        "-regex", metavar="regex", required=False, help="DashboardDataDir",nargs='+', default=[])
+	ConsoleLogFile = open("./console.log", "w")
+	argparser = argparse.ArgumentParser(description="Jira")
+	argparser.add_argument('keywords', nargs='+')
+	argparser.add_argument(
+		"-regex", metavar="regex", required=False, help="DashboardDataDir",nargs='+', default=[])
 
-    argparser.add_argument(
-        "-getregex", metavar="regex", required=False, help="DashboardDataDir",nargs='+', default=[])
+	argparser.add_argument(
+		"-getregex", metavar="regex", required=False, help="DashboardDataDir",nargs='+', default=[])
 
-    argparser.add_argument(
-        "-commentedBy", metavar="UserName",  default="", required=False,
-        help="Find tickets which are commented by persons. Pass comma separated names in double quotes")
+	argparser.add_argument(
+		"-commentedBy", metavar="UserName",  default="", required=False,
+		help="Find tickets which are commented by persons. Pass comma separated names in double quotes")
 
-    argparser.add_argument(
-        "-appendInJquery", metavar="commentedby fasnfjksngkj",  default="", required=False,
-        help="Append this as part of jquery")
+	argparser.add_argument(
+		"-appendInJquery", metavar="commentedby fasnfjksngkj",  default="", required=False,
+		help="Append this as part of jquery")
 
-    argparser.add_argument(
-        "-appendInCquery", metavar="commentedby fasnfjksngkj",  default="", required=False,
-        help="Append this as part of jquery")
+	argparser.add_argument(
+		"-appendInCquery", metavar="commentedby fasnfjksngkj",  default="", required=False,
+		help="Append this as part of jquery")
 
-    argparser.add_argument(
-        "-customJquery", metavar="text ~ nitin AND commentedBy fasnfjksngkj",  default="", required=False,
-        help="Use this is the only jquery")
+	argparser.add_argument(
+		"-customJquery", metavar="text ~ nitin AND commentedBy fasnfjksngkj",  default="", required=False,
+		help="Use this is the only jquery")
 
-    argparser.add_argument(
-        "-customCquery", metavar="text ~ nitin AND commentedBy fasnfjksngkj",  default="", required=False,
-        help="Use this is the only cquery")
+	argparser.add_argument(
+		"-customCquery", metavar="text ~ nitin AND commentedBy fasnfjksngkj",  default="", required=False,
+		help="Use this is the only cquery")
 
-    argparser.add_argument(
-        "-verbose", action='store_true', help="Enable detailed log")
-
-
-    argparser.add_argument(
-        "-debug", action='store_true', help="Enable Debugging mode")
+	argparser.add_argument(
+		"-verbose", action='store_true', help="Enable detailed log")
 
 
-    args = argparser.parse_args()
-    # print(args)
-    commentedBy=list(filter(None,args.commentedBy.split(",")))
-    ## used filter to remove empty contents from list
-    Logging.debug=args.debug
-    UniSearch(
-    keywords=args.keywords,
-     commentedBy=commentedBy,
-     regexs=args.regex,
-     appendInJquery=args.appendInJquery,
-     appendInCquery=args.appendInCquery,
-     customJquery=args.customJquery,
-     customCquery=args.customCquery,
-     getregexs=args.getregex
-     )
+	argparser.add_argument(
+		"-debug", action='store_true', help="Enable Debugging mode")
 
 
-    ConsoleLogFile.close()
+	args = argparser.parse_args()
+	# print(args)
+	commentedBy=list(filter(None,args.commentedBy.split(",")))
+	## used filter to remove empty contents from list
+	Logging.debug=args.debug
+	UniSearch(
+	keywords=args.keywords,
+	 commentedBy=commentedBy,
+	 regexs=args.regex,
+	 appendInJquery=args.appendInJquery,
+	 appendInCquery=args.appendInCquery,
+	 customJquery=args.customJquery,
+	 customCquery=args.customCquery,
+	 getregexs=args.getregex
+	 )
+
+
+	ConsoleLogFile.close()
 # %%

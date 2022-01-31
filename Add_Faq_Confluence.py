@@ -12,7 +12,7 @@ import Shared
 
 import datetime as dt
 import atlassian 
-from Shared import Logging,DebugMsg,Info
+from Shared import Logging,DebugMsg,Info,Shared
 
 # %%
 #confluence.get_all_spaces(start=0, limit=5, expand=None)
@@ -51,79 +51,77 @@ from Shared import Logging,DebugMsg,Info
 # %%
 class AddFaqConfluence:
 
-    def __init__(self, heading,paragraph,credentialsFile=None,credentialsHead=None):
+	def __init__(self, heading,paragraph,credentialsFile=None,credentialsHead=None):
 
-        if credentialsFile is None:
-            credentialsFile= "~/.Confluence.json"
+		defaultsFile = Shared.defaultsFilePath
+		if credentialsHead is None:
+			credentialsHead="Confluence"
 
-        self.credentialsHead="ConfluenceCredentials"
-        if credentialsHead is not None:
-            self.credentialsHead=credentialsHead
+		self.defaults=Shared.read_defaults(defaultsFile,credentialsHead)
+		if credentialsFile is None:
+			credentialsFile = self.defaults["CredentialsFile"]
 
-        credentialsFile=os.path.abspath(os.path.expanduser(os.path.expandvars(credentialsFile)))
-        self.read_credentials(credentialsFile)
-        oauth2_dict = {
-            "client_id": None,
-            "token": {
-                "access_token": self.token
-            }
-        }
-        self.confluence = atlassian.Confluence(url=self.server,oauth2=oauth2_dict)
-        self.appendInFAQs(heading=heading,paragraph=paragraph)
+		self.credentials=Shared.read_credentials(credentialsFile,credentialsHead)
+
+		if not Shared.isVpnConnected(self.credentials["server"]):
+			return
 
 
-      #  self.get_matching_results(results,regexs)
+		oauth2_dict = {
+			"client_id": None,
+			"token": {
+				"access_token": self.credentials["token"]
+			}
+		}
+		self.confluence = atlassian.Confluence(url=self.credentials["server"],oauth2=oauth2_dict)
+		self.appendInFAQs(heading=heading,paragraph=paragraph)
 
-    def appendInFAQs(self,heading,paragraph):
-        heading=" ".join(heading)
-        paragraph=" ".join(paragraph)
-        PageId_Memory_Workflows=577227622
-        PageId_FAQs=924951844
-        PageId_test1=924952128
-        page_body="<br /><h1>" + self.htmlspecialchars(heading.strip())+ "</h1><p>" +  self.htmlspecialchars(paragraph.strip()) + "</p>" 
-        if not Shared.isVpnConnected(self.server):
-            return
-        page_info=self.confluence.get_page_by_id( PageId_test1, expand=None, status=None, version=None)
-        page_url=self.server + page_info['space']['_links']['webui']  + "/" + urllib.parse.quote_plus( page_info['title'] )
-        page_title=page_info['title']
-        added=self.confluence.append_page(PageId_test1, page_title ,page_body, parent_id=PageId_FAQs, type='page', representation='storage', minor_edit=False)
-        if 'id' in added:
-            Info("Appended in " + page_url)
-        return added
 
-    def htmlspecialchars(self,text):
-        return (
-            text.replace("&", "&amp;").
-            replace('"', "&quot;").
-            replace("<", "&lt;").
-            replace(">", "&gt;").
-            replace("\n","<br />")
-        )
-    
-    def read_credentials(self,filename):
-        with open (filename) as f:
-            creds=json.load(f)
-        self.token=creds[self.credentialsHead]['token']
-        self.server=creds[self.credentialsHead]['server']
-        self.username=creds[self.credentialsHead]['username']
+	  #  self.get_matching_results(results,regexs)
 
+	def appendInFAQs(self,heading,paragraph):
+		heading=" ".join(heading)
+		paragraph=" ".join(paragraph)
+		PageId_Memory_Workflows=577227622
+		PageId_FAQs=924951844
+		PageId_test1=924952128
+		page_body="<br /><h1>" + self.htmlspecialchars(heading.strip())+ "</h1><p>" +  self.htmlspecialchars(paragraph.strip()) + "</p>" 
+		if not Shared.isVpnConnected(self.credentials["server"]):
+			return
+		page_info=self.confluence.get_page_by_id( PageId_test1, expand=None, status=None, version=None)
+		page_url=self.credentials["server"] + page_info['space']['_links']['webui']  + "/" + urllib.parse.quote_plus( page_info['title'] )
+		page_title=page_info['title']
+		added=self.confluence.append_page(PageId_test1, page_title ,page_body, parent_id=PageId_FAQs, type='page', representation='storage', minor_edit=False)
+		if 'id' in added:
+			Info("Appended in " + page_url)
+		return added
+
+	def htmlspecialchars(self,text):
+		return (
+			text.replace("&", "&amp;").
+			replace('"', "&quot;").
+			replace("<", "&lt;").
+			replace(">", "&gt;").
+			replace("\n","<br />")
+		)
+	
 
 
 if __name__ == "__main__":
 
-    argparser = argparse.ArgumentParser(description="Confluence Search")
-    argparser.add_argument('-heading', nargs='+')
-    argparser.add_argument('-paragraph', nargs='+')
+	argparser = argparse.ArgumentParser(description="Confluence Search")
+	argparser.add_argument('-heading', nargs='+')
+	argparser.add_argument('-paragraph', nargs='+')
 
-    argparser.add_argument(
-        "-verbose", action='store_true', help="Enable detailed log")
-
-
-    argparser.add_argument(
-        "-debug", action='store_true', help="Enable Debugging mode")
+	argparser.add_argument(
+		"-verbose", action='store_true', help="Enable detailed log")
 
 
-    args = argparser.parse_args()
+	argparser.add_argument(
+		"-debug", action='store_true', help="Enable Debugging mode")
 
 
-    AddFaqConfluence(heading=args.heading,paragraph=args.paragraph, credentialsFile="~/.UniSearch.json")
+	args = argparser.parse_args()
+
+
+	AddFaqConfluence(heading=args.heading,paragraph=args.paragraph, credentialsFile="~/.UniSearch.json")

@@ -157,9 +157,10 @@ jira.py.tar
 testJira.ipynb
 PrivateInfo.json
 junk
-temp
+temp*
 arm/
 *log*
 jira_cloud_logs.tar
 .gi1t
 test.py
+/defaults.json

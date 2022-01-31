@@ -1,0 +1,49 @@
+{
+    "UniSearch" : {
+        "CredentialsFile" : "~/UniSearch.json"
+    },
+    "Jira": {
+        "CredentialsFile" : "~/UniSearch.json",
+        "fields": {
+            "project": "projectName",
+            "watchers_list": [
+            "User.Name1@org.com",
+            "User.Name2@org.com",
+            "User.Name3@org.com",
+            "User.Name4@org.com",
+            "User.Name5@org.com"
+            ]
+        }
+    },
+    "Confluence": {
+        "CredentialsFile" : "~/UniSearch.json"
+    },
+    "Sharepoint": {
+        "CredentialsFile" : "~/UniSearch.json"
+    },
+    "JiraCloud": {
+        "CredentialsFile" : "~/UniSearch.json",
+        "fields": {
+            "project": "projectName",
+            "components": [
+                {
+                    "name": "General"
+                }
+            ],
+            "issuetype": {
+                "name": "Query"
+            }
+        },
+        "watchers_list": [
+            "User.Name1@org.com",
+            "User.Name2@org.com",
+            "User.Name3@org.com",
+            "User.Name4@org.com",
+            "User.Name5@org.com",
+            "User.Name6@org.com",
+            "User.Name7@org.com",
+            "User.Name8@org.com",
+            "User.Name9@org.com"
+        ]
+    }
+}
