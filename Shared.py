@@ -70,7 +70,7 @@ class Shared:
         mode = os.stat(filename).st_mode
 
         if  (mode & stat.S_IRGRP) or (mode & stat.S_IROTH) or (mode & stat.S_IWGRP) or (mode & stat.S_IWOTH):
-            print(filename + ' readable by group or other people. Please revoke access of others of file using command\n chmod 644 ' + filename)
+            print(filename + ' readable by group or other people. Please revoke access of others of file using command\n chmod 600 ' + filename)
             exit()
 
 
