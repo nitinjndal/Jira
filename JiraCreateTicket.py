@@ -93,7 +93,7 @@ class JiraCreateTicket:
 		components=[]
 		issue_type=fields_values["issuetype"]
 		fields_values['customfield_13931']= 'CRUN-2031'
-		,Corsinfields_values["priority"]={"name": "Major" }
+		fields_values["priority"]={"name": "Major" }
 
 		## change from defaults if specified otherwise
 #		fields_values["issuetype"]=issue_type
