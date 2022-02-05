@@ -1,5 +1,4 @@
 #! /usr/bin/env python
-##! /arm/tools/anaconda/conda_py3.7/2019.03/linux64/bin/python -E
 
 #
 from email.policy import default
