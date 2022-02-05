@@ -95,11 +95,6 @@ class AddFaqConfluence:
 		return paragraph
 	
 	def get_pageid(self,page):
-		PageId_Memory_Workflows=577227622
-		PageId_FAQs=924951844
-		PageId_test1=924952128
-		PageId_Arm_Mem_Flow=924951851
-		AetherFaqid=760460810
 		print(self.defaults)
 		if page.lower() in self.defaults["pageId"]:
 			return self.defaults["pageId"][page.lower()]
