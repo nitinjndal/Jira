@@ -15,7 +15,6 @@ from Shared import Logging,DebugMsg,Info,Shared
 import pprint
 
 ### to get all users info in json:
-##https://armcloud.atlassian.net/rest/api/3/user/assignable/search?project=PEGASUS&maxResults=1000&startAt=5000
 
 
 class JiraCreateTicket:
@@ -92,7 +91,6 @@ class JiraCreateTicket:
 
 		components=[]
 		issue_type=fields_values["issuetype"]
-		fields_values['customfield_13931']= 'CRUN-2031'
 		fields_values["priority"]={"name": "Major" }
 
 		## change from defaults if specified otherwise
@@ -151,7 +149,6 @@ class JiraCreateTicket:
 		
 
 	def create_ticket(self, logfile, summary, description):
-		#   project_name="PEGASUS"
 		#	summary_value="How to update install/../corner rdb without changing mdbs"
 		#	description_value="Hi Syam, How we can change corners.rdb file only after updating the EOS_CORNERS_RDB file wihtout impacting the mdbs. Can we do that if do not have char ran in the sandbox"
 
