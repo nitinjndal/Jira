@@ -30,7 +30,12 @@ class Logging:
     
 
 logging.basicConfig(format='%(asctime)s %(message)s', datefmt='%m/%d/%Y %I:%M:%S %p')
-def DebugMsg(msg1,msg2="",printmsg=True,ForcePrint=False,print_dt=True):
+def DebugMsg(msg1,msg2="",printmsg=True,ForcePrint=False,print_dt=True,error=False):
+    if error:
+        print("ERROR: " ,end=": " )
+        if Logging.ConsoleLogFile is not None:
+            Logging.ConsoleLogFile.write("ERROR: ")
+
     if (Logging.debug or ForcePrint) and printmsg:
         if not (((str(msg1) == "" )or (msg1 is None)) and ((str(msg2) == "") or (msg2 is None))) :
             if print_dt:
@@ -61,6 +66,9 @@ def DebugMsg3(msg1,msg2=None,printmsg=True,ForcePrint=False,print_dt=True):
 
 def Info(msg1,msg2=None,printmsg=True,ForcePrint=False,print_dt=True):
     DebugMsg(msg1,msg2,printmsg,True,print_dt)
+
+def Error(msg1,msg2=None,printmsg=True,ForcePrint=False,print_dt=True):
+    DebugMsg(msg1,msg2,printmsg,True,print_dt,error=True)
 
 class Shared:
     defaultsFilePath=os.path.dirname(os.path.abspath(__file__)) + "/defaults.json"

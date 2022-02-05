@@ -12,7 +12,7 @@ import Shared
 
 import datetime as dt
 import atlassian 
-from Shared import Logging,DebugMsg,Info,Shared
+from Shared import Logging,DebugMsg,Info,Error,Shared
 
 # %%
 #confluence.get_all_spaces(start=0, limit=5, expand=None)
@@ -77,7 +77,10 @@ class AddFaqConfluence:
 
 		paragraph=self.set_paragraph(paragraph,paragraphFile)
 		pageid=self.get_pageid(page)
-		self.appendInFAQs(heading=heading,paragraph=paragraph,pageid=pageid)
+		if pageid is not None:
+			self.appendInFAQs(heading=heading,paragraph=paragraph,pageid=pageid)
+		else:
+			Error("Page ID is None")
 
 
 	  #  self.get_matching_results(results,regexs)
@@ -97,11 +100,12 @@ class AddFaqConfluence:
 		PageId_test1=924952128
 		PageId_Arm_Mem_Flow=924951851
 		AetherFaqid=760460810
-		if page.lower() == "aetherfaq":
-			return AetherFaqid
+		print(self.defaults)
+		if page.lower() in self.defaults["pageId"]:
+			return self.defaults["pageId"][page.lower()]
 		else:
-#			return PageId_test1
-			return PageId_Arm_Mem_Flow
+			Error("Page " + page + " not Found")
+			exit()
 
 		
 
@@ -112,7 +116,7 @@ class AddFaqConfluence:
 			return
 		page_info=self.confluence.get_page_by_id( pageid, expand=None, status=None, version=None)
 		page_url=self.credentials["server"] + page_info['space']['_links']['webui']  + "/" + urllib.parse.quote_plus( page_info['title'] )
-		page_url="https://confluence.arm.com/pages/viewpage.action?pageId=" + str(pageid)
+		page_url=self.defaults["url_view_pageid"] + str(pageid)
 		page_title=page_info['title']
 		ancestors=self.confluence.get_page_ancestors(pageid)
 		added=None
