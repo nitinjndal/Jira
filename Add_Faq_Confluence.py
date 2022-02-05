@@ -51,7 +51,7 @@ from Shared import Logging,DebugMsg,Info,Shared
 # %%
 class AddFaqConfluence:
 
-	def __init__(self, heading,paragraph,credentialsFile=None,credentialsHead=None):
+	def __init__(self, heading,paragraph=None,paragraphFile=None,credentialsFile=None,credentialsHead=None,page="MemFAQ"):
 
 		defaultsFile = Shared.defaultsFilePath
 		if credentialsHead is None:
@@ -74,26 +74,53 @@ class AddFaqConfluence:
 			}
 		}
 		self.confluence = atlassian.Confluence(url=self.credentials["server"],oauth2=oauth2_dict)
-		self.appendInFAQs(heading=heading,paragraph=paragraph)
+
+		paragraph=self.set_paragraph(paragraph,paragraphFile)
+		pageid=self.get_pageid(page)
+		self.appendInFAQs(heading=heading,paragraph=paragraph,pageid=pageid)
 
 
 	  #  self.get_matching_results(results,regexs)
 
-	def appendInFAQs(self,heading,paragraph):
-		heading=" ".join(heading)
-		paragraph=" ".join(paragraph)
+
+	def set_paragraph(self,paragraph,paragraphFile):
+		if paragraph is None:
+			if paragraphFile is not None:
+				with open(paragraphFile) as f:
+					description=f.read()
+					description=str.replace(description,"\n","\r\n")
+		return paragraph
+	
+	def get_pageid(self,page):
 		PageId_Memory_Workflows=577227622
 		PageId_FAQs=924951844
 		PageId_test1=924952128
-		page_body="<br /><h1>" + self.htmlspecialchars(heading.strip())+ "</h1><p>" +  self.htmlspecialchars(paragraph.strip()) + "</p>" 
+		PageId_Arm_Mem_Flow=924951851
+		AetherFaqid=760460810
+		if page.lower() == "aetherfaq":
+			return AetherFaqid
+		else:
+#			return PageId_test1
+			return PageId_Arm_Mem_Flow
+
+		
+
+	def appendInFAQs(self,heading,paragraph,pageid):
+		print(heading)
+		page_body="<br /><h1>" + self.htmlspecialchars(heading.strip())+ "</h1><p> " +  self.htmlspecialchars(paragraph.strip()) + "</p>" 
 		if not Shared.isVpnConnected(self.credentials["server"]):
 			return
-		page_info=self.confluence.get_page_by_id( PageId_test1, expand=None, status=None, version=None)
+		page_info=self.confluence.get_page_by_id( pageid, expand=None, status=None, version=None)
 		page_url=self.credentials["server"] + page_info['space']['_links']['webui']  + "/" + urllib.parse.quote_plus( page_info['title'] )
+		page_url="https://confluence.arm.com/pages/viewpage.action?pageId=" + str(pageid)
 		page_title=page_info['title']
-		added=self.confluence.append_page(PageId_test1, page_title ,page_body, parent_id=PageId_FAQs, type='page', representation='storage', minor_edit=False)
-		if 'id' in added:
-			Info("Appended in " + page_url)
+		ancestors=self.confluence.get_page_ancestors(pageid)
+		added=None
+		if len(ancestors)> 0:
+			parent_id=ancestors[-1]['id']
+			added=self.confluence.append_page(pageid, page_title ,page_body, parent_id=parent_id, type='page', representation='storage', minor_edit=False)
+			if 'id' in added:
+				Info("Appended in " + str(page_title) + "  : " + page_url)
 		return added
 
 	def htmlspecialchars(self,text):
@@ -110,8 +137,10 @@ class AddFaqConfluence:
 if __name__ == "__main__":
 
 	argparser = argparse.ArgumentParser(description="Confluence Search")
-	argparser.add_argument('-heading', nargs='+')
-	argparser.add_argument('-paragraph', nargs='+')
+	argparser.add_argument('-heading',required=True)
+	argparser.add_argument('-paragraph',required=False)
+	argparser.add_argument('-paragraphFile',required=False)
+	argparser.add_argument('-page',required=False,default="MemFaq",metavar="MemFAQ", help="MemFAQ/AetherFAQ")
 
 	argparser.add_argument(
 		"-verbose", action='store_true', help="Enable detailed log")
@@ -122,6 +151,7 @@ if __name__ == "__main__":
 
 
 	args = argparser.parse_args()
+	print(args)
 
-
-	AddFaqConfluence(heading=args.heading,paragraph=args.paragraph, credentialsFile="~/.UniSearch.json")
+	AddFaqConfluence(heading=args.heading,paragraph=args.paragraph,paragraphFile=args.paragraphFile,page=args.page ,credentialsFile="~/.UniSearch.json")
+	x=2

@@ -37,13 +37,13 @@ def DebugMsg(msg1,msg2="",printmsg=True,ForcePrint=False,print_dt=True):
                 print(dt.datetime.now().strftime("%c"),end=": " )
                 if Logging.ConsoleLogFile is not None:
                     Logging.ConsoleLogFile.write(dt.datetime.now().strftime("%c") + ": ")
-        print(msg1.encode('utf-8',errors='ignore').decode('charmap',errors='ignore'),end=" " )
+        print(str(msg1).encode('utf-8',errors='ignore').decode('charmap',errors='ignore'),end=" " )
         if Logging.ConsoleLogFile is not None:
-            Logging.ConsoleLogFile.write(msg1.encode('utf-8',errors='ignore').decode('charmap',errors='ignore') + " ")
+            Logging.ConsoleLogFile.write(str(msg1).encode('utf-8',errors='ignore').decode('charmap',errors='ignore') + " ")
         if msg2 is not None:
-            print(msg2.encode('utf-8',errors='ignore').decode('charmap',errors='ignore'))
+            print(str(msg2).encode('utf-8',errors='ignore').decode('charmap',errors='ignore'))
             if Logging.ConsoleLogFile is not None:
-                Logging.ConsoleLogFile.write(msg2.encode('utf-8',errors='ignore').decode('charmap',errors='ignore') + "\n")
+                Logging.ConsoleLogFile.write(str(msg2).encode('utf-8',errors='ignore').decode('charmap',errors='ignore') + "\n")
         else:
             print("")
             if Logging.ConsoleLogFile is not None:

@@ -94,7 +94,7 @@ class UniSearch:
 		SharePointThread.join()
 		FinditThread.join()
 		ConfluenceThread.join()
-		Info("  COmpleted")
+		Info("  Completed")
 		print(dt.datetime.now() - begin_time)
 
 
