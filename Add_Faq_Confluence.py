@@ -144,7 +144,6 @@ if __name__ == "__main__":
 	argparser.add_argument(
 		"-verbose", action='store_true', help="Enable detailed log")
 
-
 	argparser.add_argument(
 		"-debug", action='store_true', help="Enable Debugging mode")
 
@@ -153,4 +152,3 @@ if __name__ == "__main__":
 	print(args)
 
 	AddFaqConfluence(heading=args.heading,paragraph=args.paragraph,paragraphFile=args.paragraphFile,page=args.page ,credentialsFile="~/.UniSearch.json")
-	x=2

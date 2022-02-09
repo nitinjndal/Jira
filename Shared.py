@@ -14,6 +14,8 @@ from markdown import markdown
 import re
 import html2text
 
+import collections
+import itertools
 ## import shutil
 #from sympy import primenu
 ## import pandas as pd
@@ -121,3 +123,34 @@ class Shared:
         text = ''.join(soup.findAll(text=True))
 
         return text
+    
+    def tail(filename, n=10):
+        with open(filename) as f:
+            return "\n".join(list(collections.deque(f, n)))
+
+    def get_n_lines_after_before(pattern,filename,n=3,line_prefix="",line_suffix=""):
+        lines=[]
+        retval=""
+        start_count=False
+        count=n+1
+        with open(filename) as f:
+            if n > 0 :
+                before = collections.deque(maxlen=n)
+            for line in f:
+                count+=1
+                if re.search(pattern,line,flags=re.IGNORECASE) is not None:
+                    if n > 0 and  count > n:
+                        count=0
+                        lines=lines+ list(before)
+                    elif n==0:
+                        lines.append(line)
+#                    lines.append(line)
+                if count < n:
+                    lines.append(line)
+                elif count == n:
+                    lines.append("####################\n\n")
+                if n > 0 :
+                    before.append(line)
+        for line in lines:
+            retval=retval + line_prefix+  str(line).strip() + line_suffix + "\n"
+        return retval

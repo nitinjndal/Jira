@@ -32,7 +32,7 @@ class Jira:
 		defaultsFile = Shared.defaultsFilePath
 
 		if credentialsHead is None:
-			credentialsHead="Jira"
+			credentialsHead="JiraCloud"
 
 		self.defaults=Shared.read_defaults(defaultsFile,credentialsHead)
 		if credentialsFile is None:
