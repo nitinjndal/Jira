@@ -62,10 +62,9 @@ class SharepointSearch():
 	def setTokenCache(self):
 		self.__cache= msal.SerializableTokenCache()
 		if os.path.exists(self.tokenCacheFile):
-			with open(self.tokenCacheFile) as f:
-				js=json.load(f)
-				if "token_cache" in js:
-					self.__cache.deserialize(js["token_cache"])
+			js=Shared.read_credentials_File(self.tokenCacheFile)
+			if "token_cache" in js:
+				self.__cache.deserialize(js["token_cache"])
 		atexit.register(self.updateTokenCache)
 		
 
@@ -74,13 +73,11 @@ class SharepointSearch():
 
 		if self.__cache.has_state_changed:
 			if os.path.exists(self.tokenCacheFile):
-				with open(self.tokenCacheFile) as f:
-					js=json.load(f)
+				js=Shared.read_credentials_File(self.tokenCacheFile)
 
 			js["token_cache"]= self.__cache.serialize()
 		
-			with open(self.tokenCacheFile,"w") as f:
-				json.dump(js,f)
+			Shared.update_credentials(self.tokenCacheFile,js)
 	
 	def acquire_token(self,scope):
 		app = msal.PublicClientApplication(

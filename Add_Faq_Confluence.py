@@ -51,7 +51,7 @@ from Shared import Logging,DebugMsg,Info,Error,Shared
 # %%
 class AddFaqConfluence:
 
-	def __init__(self, heading,paragraph=None,paragraphFile=None,credentialsFile=None,credentialsHead=None,page="MemFAQ"):
+	def __init__(self, heading,paragraph=None,paragraphFile=None,credentialsFile=None,credentialsHead=None,page="MemFAQ",pageid=None,operation="append"):
 
 		defaultsFile = Shared.defaultsFilePath
 		if credentialsHead is None:
@@ -76,11 +76,12 @@ class AddFaqConfluence:
 		self.confluence = atlassian.Confluence(url=self.credentials["server"],oauth2=oauth2_dict)
 
 		paragraph=self.set_paragraph(paragraph,paragraphFile)
-		pageid=self.get_pageid(page)
-		if pageid is not None:
-			self.appendInFAQs(heading=heading,paragraph=paragraph,pageid=pageid)
-		else:
-			Error("Page ID is None")
+		if pageid is None:
+			pageid=self.get_pageid(page)
+			if pageid is not None:
+				self.appendInFAQs(heading=heading,paragraph=paragraph,pageid=pageid,operation=operation)
+			else:
+				Error("Page ID is None")
 
 
 	  #  self.get_matching_results(results,regexs)
@@ -90,8 +91,13 @@ class AddFaqConfluence:
 		if paragraph is None:
 			if paragraphFile is not None:
 				with open(paragraphFile) as f:
-					description=f.read()
-					description=str.replace(description,"\n","\r\n")
+					paragraph=f.read()
+					paragraph=str.replace(paragraph,"\n","\r\n")
+			else:
+				print("Paragraph or pragrapfFile should be given")
+				exit()
+		else:
+			paragraph="<p>" + paragraph + "</p>"
 		return paragraph
 	
 	def get_pageid(self,page):
@@ -104,9 +110,11 @@ class AddFaqConfluence:
 
 		
 
-	def appendInFAQs(self,heading,paragraph,pageid):
+	def appendInFAQs(self,heading,paragraph,pageid,operation):
 		print(heading)
-		page_body="<br /><h1>" + self.htmlspecialchars(heading.strip())+ "</h1><p> " +  self.htmlspecialchars(paragraph.strip()) + "</p>" 
+		#page_body="<br /><h1>" + self.htmlspecialchars(heading.strip())+ "</h1><p> " +  self.htmlspecialchars(paragraph.strip()) + "</p>" 
+		page_body="<br /><h1>" + self.htmlspecialchars(heading.strip())+ "</h1> <p></p>" +  self.htmlspecialchars(paragraph.strip()) + "<p></p>" 
+		print(page_body)
 		if not Shared.isVpnConnected(self.credentials["server"]):
 			return
 		page_info=self.confluence.get_page_by_id( pageid, expand=None, status=None, version=None)
@@ -117,8 +125,13 @@ class AddFaqConfluence:
 		added=None
 		if len(ancestors)> 0:
 			parent_id=ancestors[-1]['id']
-			added=self.confluence.append_page(pageid, page_title ,page_body, parent_id=parent_id, type='page', representation='storage', minor_edit=False)
-			if 'id' in added:
+			if operation=="append":
+				added=self.confluence.append_page(pageid, page_title ,page_body, parent_id=parent_id, type='page', representation='storage', minor_edit=False)
+			elif operation == "update":
+				added=self.confluence.update_page(pageid, page_title ,page_body, parent_id=parent_id, type='page', representation='storage', minor_edit=False)
+			else:
+				Error("Invalid Operation.")
+			if added is not None and 'id' in added:
 				Info("Appended in " + str(page_title) + "  : " + page_url)
 		return added
 
@@ -126,8 +139,8 @@ class AddFaqConfluence:
 		return (
 			text.replace("&", "&amp;").
 			replace('"', "&quot;").
-			replace("<", "&lt;").
-			replace(">", "&gt;").
+			#replace("<", "&lt;").
+			#replace(">", "&gt;").
 			replace("\n","<br />")
 		)
 	
@@ -140,6 +153,8 @@ if __name__ == "__main__":
 	argparser.add_argument('-paragraph',required=False)
 	argparser.add_argument('-paragraphFile',required=False)
 	argparser.add_argument('-page',required=False,default="MemFaq",metavar="MemFAQ", help="MemFAQ/AetherFAQ")
+	argparser.add_argument('-pageid',required=False,default=None,metavar="924952128", help="MemFAQ/AetherFAQ")
+	argparser.add_argument('-recreate',action='store_true',help="Delete existing contents and recreate page")
 
 	argparser.add_argument(
 		"-verbose", action='store_true', help="Enable detailed log")
@@ -150,5 +165,9 @@ if __name__ == "__main__":
 
 	args = argparser.parse_args()
 	print(args)
+	operation="append"
+	if args.recreate:
+		operation="update"
+    
 
-	AddFaqConfluence(heading=args.heading,paragraph=args.paragraph,paragraphFile=args.paragraphFile,page=args.page ,credentialsFile="~/.UniSearch.json")
+	AddFaqConfluence(heading=args.heading,paragraph=args.paragraph,paragraphFile=args.paragraphFile,page=args.page,pageid=args.pageid ,credentialsFile="~/.UniSearch.json",operation=operation)

@@ -165,3 +165,4 @@ jira_cloud_logs.tar
 test.py
 /defaults.json
 lib64
+enc.key

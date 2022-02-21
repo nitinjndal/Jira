@@ -46,13 +46,13 @@ class JiraCreateTicket:
 		if not Shared.isVpnConnected(self.credentials["server"]):
 			return
 		
-		#description=self.set_description(description,descriptionFile)
+		description=self.set_description(description,descriptionFile)
 
 		issue=None
 		self.jira = jira.JIRA(basic_auth=(self.credentials["username"], self.credentials["token"]), options={'server': self.credentials["server"]})
 		self.get_accountname_IdMap()
 		issue=self.create_ticket(logfile, summary, description)
-		Info(str(i) + ") " + issue.permalink() + "\t" + issue.fields.summary,print_dt=False)
+		Info( issue.permalink() + "\t" + issue.fields.summary,print_dt=False)
 		if issue is not None:
 			self.add_watchers(issue.id)
 		#self.add_watchers("PEGASUS-24146")

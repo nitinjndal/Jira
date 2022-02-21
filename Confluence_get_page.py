@@ -16,7 +16,7 @@ import functools
 
 class Confluence:
 
-	def __init__(self, keywords,regexs=[],appendInCquery="",customCquery=None,getregexs=[],credentialsFile=None,credentialsHead=None):
+	def __init__(self, keywords,regexs=[],commentedBy=[],appendInCquery="",customCquery=None,getregexs=[],credentialsFile=None,credentialsHead=None):
 
 		defaultsFile = Shared.defaultsFilePath
 		if credentialsHead is None:
@@ -46,11 +46,6 @@ class Confluence:
 		results=self.get_results_tp(cql_query)
 #		self.printResults(results)
 		self.get_matching_results_tp(results,regexs)
-	
-	def get_page(self,pageid):
-		page=self.confluence.get_page_by_id(page_id=pageid,expand='body.view')
-		html_output=page['body']['view']['value']
-		print(html_output)
 
 
 	def create_cql(self,customCquery=None, appendInCquery=""):
@@ -226,16 +221,16 @@ if __name__ == "__main__":
 		"-getregex", metavar="regex", required=False, help="DashboardDataDir",nargs='+', default=[])
 
 	argparser.add_argument(
+		"-commentedBy", metavar="UserName",  default="", required=False,
+		help="Find tickets which are commented by persons. Pass comma separated names in double quotes")
+
+	argparser.add_argument(
 		"-appendInCquery", metavar="commentedby fasnfjksngkj",  default="", required=False,
 		help="Append this as part of jquery")
 
 	argparser.add_argument(
 		"-customCquery", metavar="text ~ nitin AND commentedBy fasnfjksngkj",  default="", required=False,
 		help="Use this is the only jquery")
-
-	argparser.add_argument(
-		"-pageid", metavar="Page id",  default=None, required=False,
-		help="get page by id")
 
 	argparser.add_argument(
 		"-verbose", action='store_true', help="Enable detailed log")
@@ -248,17 +243,14 @@ if __name__ == "__main__":
 	args = argparser.parse_args()
 	# print(args)
 	Logging.debug=args.debug
+	commentedBy=list(filter(None,args.commentedBy.split(",")))
 	## used filter to remove empty contents from list
 
 
-	c=Confluence(args.keywords,
+	Confluence(args.keywords,
+	 commentedBy=commentedBy,
 	 regexs=args.regex,
 	 appendInCquery=args.appendInCquery,
 	 customCquery=args.customCquery,
 	 getregexs=args.getregex
 	)
-	if args.pageid is not None:
-		c.get_page(args.pageid)
-		
-    
-

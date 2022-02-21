@@ -37,6 +37,7 @@ class UniSearch:
 
 		self.defaults=Shared.read_defaults(defaultsFile,credentialsHead)
 		credentialsFile = Shared.abs_path(self.defaults["CredentialsFile"])
+		temp=Shared.read_credentials_File(credentialsFile)
 
 		JiraCloudThread = threading.Thread(target=Jira.Jira,
 							  kwargs=dict(keywords=keywords,
@@ -76,7 +77,6 @@ class UniSearch:
 		ConfluenceThread = threading.Thread(
 			target=Confluence.Confluence,
 			kwargs=dict(keywords=args.keywords,
-						commentedBy=commentedBy,
 						regexs=regexs,
 						appendInCquery=appendInCquery,
 						customCquery=customCquery,

@@ -16,6 +16,7 @@ import html2text
 
 import collections
 import itertools
+import Encrypt
 ## import shutil
 #from sympy import primenu
 ## import pandas as pd
@@ -74,19 +75,38 @@ def Error(msg1,msg2=None,printmsg=True,ForcePrint=False,print_dt=True):
 
 class Shared:
     defaultsFilePath=os.path.dirname(os.path.abspath(__file__)) + "/defaults.json"
-    def read_credentials(filename,credentialsHead):
-        creds=None
+
+
+    def read_credentials_File(filename):
         filename=os.path.abspath(os.path.expanduser(os.path.expandvars(filename)))
-        mode = os.stat(filename).st_mode
+        try:
+            with open(filename,"r") as f: 
+                json.load(f)
+            ## if loaded correctly
+            print("Credential File is not encrypted. Please encrypt it with encryption tool")
+            
+        except:
+            creds=None
+            mode = os.stat(filename).st_mode
 
-        if  (mode & stat.S_IRGRP) or (mode & stat.S_IROTH) or (mode & stat.S_IWGRP) or (mode & stat.S_IWOTH):
-            print(filename + ' readable by group or other people. Please revoke access of others of file using command\n chmod 600 ' + filename)
-            exit()
+            if  (mode & stat.S_IRGRP) or (mode & stat.S_IROTH) or (mode & stat.S_IWGRP) or (mode & stat.S_IWOTH):
+                print(filename + ' readable by group or other people. Please revoke access of others of file using command\n chmod 600 ' + filename)
+                exit()
+            creds=Encrypt.read_credentials_File(filename)
+            return creds
 
 
-        with open(filename) as f:
-            creds = json.load(f)
-            creds=creds[credentialsHead]['credentials']
+    def update_credentials(filename,credentials):
+        filename=os.path.abspath(os.path.expanduser(os.path.expandvars(filename)))
+        creds = Encrypt.write_credentials_File(filename,credentials) 
+        return creds
+
+    def read_credentials(filename,credentialsHead):
+        filename=os.path.abspath(os.path.expanduser(os.path.expandvars(filename)))
+        creds = Shared.read_credentials_File(filename) 
+        if creds is not None:
+            if credentialsHead in creds: 
+                creds=creds[credentialsHead]['credentials']
         return creds
 
     def read_defaults(filename,credentialsHead):
