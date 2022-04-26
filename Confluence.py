@@ -8,7 +8,7 @@ import json
 
 import datetime as dt
 import atlassian 
-from Shared import Logging,DebugMsg,Info,Shared
+from Shared import Logging,DebugMsg,DebugMsg2,Info,Shared,Error
 from concurrent.futures import ThreadPoolExecutor
 import functools
 
@@ -31,22 +31,36 @@ class Confluence:
 		if not Shared.isVpnConnected(self.credentials["server"]):
 			return
 
-
 		oauth2_dict = {
 			"client_id": None,
 			"token": {
-				"access_token": self.credentials["token"]
+				"access_token": self.credentials["token"]   
 			}
 		}
 		self.confluence = atlassian.Confluence(url=self.credentials["server"],oauth2=oauth2_dict)
-
 		self.keywords=keywords
 		self.__get_regexs=getregexs
 		cql_query=self.create_cql(customCquery,appendInCquery)
 		results=self.get_results_tp(cql_query)
 #		self.printResults(results)
 		self.get_matching_results_tp(results,regexs)
-	
+
+	def isCredentialsValid(server,token):
+		if not Shared.isVpnConnected(server):
+			Error("VPN not connected. Retry after connecting VPN")
+		oauth2_dict = {
+			"client_id": None,
+			"token": {
+				"access_token": token 
+			}
+		}
+		confluence = atlassian.Confluence(url=server,oauth2=oauth2_dict)
+		spaces=confluence.get_all_spaces(start=0, limit=1, expand=None)
+		if len(spaces['results']) == 0:
+			return False
+		else:
+			return True
+     
 	def get_page(self,pageid):
 		page=self.confluence.get_page_by_id(page_id=pageid,expand='body.view')
 		html_output=page['body']['view']['value']
@@ -60,17 +74,27 @@ class Confluence:
 		if customCquery is not None and re.match(".*\S.*",customCquery):
 			cql_query=customCquery
 		else:
+			cql_query="("
 			for keyword in self.keywords:
 				if i> 0:
 					cql_query+= " AND "
-				cql_query+= "(title ~ \"" + keyword + "\" OR text ~ \"" + keyword + "\")"
+				cql_query+= "(title ~ \"\\\"" + keyword + "\\\"\" OR text ~ \"\\\"" + keyword + "\\\"\")"
 				i+=1
 			if re.match(".*\S",appendInCquery) and (not (re.match("^\s*AND",appendInCquery) or re.match("^\s*OR",appendInCquery))):
 				appendInCquery=" AND " + appendInCquery
 
-			cql_query+= " OR ("
-			cql_query+= "(title ~ \"" + " ".join(self.keywords) + "\" OR text ~ \"" + " ".join(self.keywords) + "\")"
-			cql_query+= ")"
+#			cql_query+= " OR ("
+#			cql_query+= "(title ~ \"\\\"" + " ".join(self.keywords) + "\\\"\" OR text ~ \"\\\"" + " ".join(self.keywords) + "\\\"\")"
+#			cql_query+= ")"
+			cql_query+= ") AND ("
+			i=0
+			for space in self.defaults['spaces']:
+				if i > 0:
+					cql_query+= " OR "
+				cql_query+= "(space = \"" + space +  "\")"
+				i+=1
+			cql_query+=")"
+   
 			cql_query += appendInCquery
 		#    cql_query +=" ORDER BY updatedDate DESC"
 		return cql_query
@@ -102,10 +126,10 @@ class Confluence:
 			for pattern in (regexs + keywords):
 				found=False
 				if re.search(pattern,content,re.IGNORECASE):
-					DebugMsg("Found ", pattern )
+					DebugMsg2("Found ", pattern )
 					found=True
 				else:
-					DebugMsg("Not Found ", pattern )
+					DebugMsg2("Not Found ", pattern )
 
 
 				if not found:
@@ -135,8 +159,8 @@ class Confluence:
 
 	def get_results_tp(self,cql_query):
 		DebugMsg("Cql_query = " + cql_query)
-		max_results=400
-		max_results_per_iter=40
+		max_results=100
+		max_results_per_iter=20
 		start_ats=[]
 		for i in range(0,int(max_results/max_results_per_iter)):
 			start_ats.append(max_results_per_iter*i)
@@ -153,17 +177,20 @@ class Confluence:
 			results=results + results_iter["results"]
 
 
+		limit_msg=""
+		if len(results) == max_results:
+			limit_msg=" (Max Limit of " + str(max_results) + " results before filtering reached)"
 		results=self.filter_relevant_results(results)
-		DebugMsg("Number of results : " + str(len(results)))
-		return results
+		DebugMsg("Number of results : " + str(len(results)) + limit_msg)
+		return results 
 
-	def printResults(self,results):
+	def printResults(self,results,header):
 		if len(results)>0:
-			DebugMsg("\n\n################## Confluence Results ###################################",print_dt=False)
+			Info("\n################## " + header + " " + "###################################",print_dt=False)
 			i=0
 			for result in results:
 				i+=1
-				printval=self.credentials["server"] + result['url']
+				printval=result['content']['title'] + " -- Link --> " + self.credentials["server"] + result['url']
 				Info(str(i) + ") " + printval,print_dt=False)
 			DebugMsg("################## Confluence Results Ends ###################################\n\n",print_dt=False)
 
@@ -192,27 +219,19 @@ class Confluence:
 		self.__printResults(results,matched_results,not_matched_results)
 
 	def __printResults(self,results,matched_results,not_matched_results):
-
+		header=""
 		if len(matched_results)>0 :
 			if len(not_matched_results)>0 and len(matched_results)< 5:
-				DebugMsg("####################################################################################")
-				DebugMsg("###### Confluence results not exactly matching the search query ###########")
-				DebugMsg("####################################################################################")
+				header="Confluence results NOT exactly matching the search query"
 		elif len(results)>0:
-			DebugMsg("")
-			DebugMsg("###### No Confluence results matched the exact regex. ###########")
+			header="Confluence results matched the exact regex"
 
 		if len(matched_results)< 5:
-			self.printResults(not_matched_results)
-		#elif len(matched_results) >  50:
-			#self.printResults(matched_results)
-			#raise ValueError("Too many results found (" + str(len(results)) + "). Only 1st 50 results shown. Please add more filters in jql query or add regex to reduce the results")
+			self.printResults(not_matched_results,header)
 
 		if len(matched_results)>0:
-			DebugMsg("####################################################################################")
-			DebugMsg("###### Confluence results matching the search query ###### ")
-			DebugMsg("####################################################################################")
-			self.printResults(matched_results)
+			header="Confluence results exactly matching the search query"
+			self.printResults(matched_results,header)
 
 
 if __name__ == "__main__":
@@ -260,5 +279,5 @@ if __name__ == "__main__":
 	if args.pageid is not None:
 		c.get_page(args.pageid)
 		
-    
+	
 

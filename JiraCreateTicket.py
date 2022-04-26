@@ -26,9 +26,11 @@ class JiraCreateTicket:
 				 summary=None,
 				 credentialsFile=None,
 				 credentialsHead=None,
-				 local_server=False):
+				 local_server=True):
 
 		defaultsFile = Shared.defaultsFilePath
+		self.project="PEGASUS"
+		#self.project="CRUN"
 
 		if credentialsHead is None:
 			if local_server:
@@ -45,8 +47,9 @@ class JiraCreateTicket:
 
 		if not Shared.isVpnConnected(self.credentials["server"]):
 			return
-		
-		description=self.set_description(description,descriptionFile)
+
+		if logfile is None:
+			description=self.set_description(description,descriptionFile)
 
 		issue=None
 		self.jira = jira.JIRA(basic_auth=(self.credentials["username"], self.credentials["token"]), options={'server': self.credentials["server"]})
@@ -84,9 +87,10 @@ class JiraCreateTicket:
 		else:
 			accountIdkey='name'
 			
-		while True:
+		while False:
+
 				params = (
-						('project', self.defaults['fields']['project']),
+						('project', self.defaults['fields'][self.project]['project']),
 						('maxResults', max_results_per_iter),
 						('startAt', start_at)
 				)
@@ -101,12 +105,11 @@ class JiraCreateTicket:
 					start_at += max_results_per_iter
 	
 	def get_fields_jiralocal(self,summary,description):
-		fields_values = self.defaults['fields']
+		fields_values = self.defaults['fields'][self.project]
 		### Set defaults
 
 		components=[]
 		issue_type=fields_values["issuetype"]
-		fields_values["priority"]={"name": "Major" }
 
 		## change from defaults if specified otherwise
 #		fields_values["issuetype"]=issue_type
@@ -119,16 +122,12 @@ class JiraCreateTicket:
 		return fields_values
 
 	def get_fields_jiracloud(self,summary,description):
-		fields_values = self.defaults['fields']
+		fields_values = self.defaults['fields'][self.project]
 		### Set defaults
 		issue_type=fields_values["issuetype"]
 		project=	fields_values["project"]
 
 		components=[]
-		fields_values["customfield_10061"]={"value": "CAT B"} ## Severity
-		fields_values["customfield_10063"]={"value": "NOI"} ## Site
-		fields_values["customfield_10064"]={"value": "NAHPC"} ## Cluster
-		fields_values["priority"]={"name": "Major" }
 		for component in components:
 			fields_values["components"].append(component)
 
@@ -209,7 +208,7 @@ class JiraCreateTicket:
 
 	def add_watchers(self, issue_id):
 		### This watcher list names needs to go to defaults, Ids it should get on the fly
-		watcher_list=self.defaults["watchers_list"]
+		watcher_list=self.defaults["watchers_list"][self.project]
 		for watcher in watcher_list:
 #			print(watcher.lower())
 			if watcher.lower() in self.accountIdsMap:
@@ -249,9 +248,9 @@ if __name__ == "__main__":
 	argparser.add_argument("-debug",
 							 action='store_true',
 							 help="Enable Debugging mode")
-	argparser.add_argument("-local",
+	argparser.add_argument("-cloud",
 							 action='store_true',
-							 help="If File ticket in Local Jira server instead of Jira Cloud")
+							 help="If File ticket in Jira Cloud server instead of Jira Local")
 	args = argparser.parse_args()
 	# print(args)
 	Logging.debug = args.debug
@@ -264,5 +263,5 @@ if __name__ == "__main__":
 					 summary=args.summary,
 					 credentialsFile=None,
 					 credentialsHead=None,
-					 local_server=args.local)
+					 local_server=(not args.cloud))
 

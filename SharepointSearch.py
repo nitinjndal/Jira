@@ -14,14 +14,26 @@ import  atexit
 import urllib.parse
 import argparse
 import datetime as dt
-from Shared import Logging,DebugMsg,Info,Shared
+from Shared import Logging,DebugMsg,DebugMsg2,Info,Shared
+import  zipfile, io
+from tika import parser
+try:
+	from xml.etree.cElementTree import XML
+except ImportError:
+	from xml.etree.ElementTree import XML
 
+import functools
+from concurrent.futures import ThreadPoolExecutor
 
 class SharepointSearch():
-	def __init__(self,keywords,credentialsFile=None,SearchSharepoint=True,SearchFindit=True):
+	def __init__(self,keywords,credentialsFile=None,SearchSharepoint=True,SearchFindit=True,SearchMail=True,regexs=[],getregexs=[]):
 		defaultsFile = Shared.defaultsFilePath
 		credentialsHead = "Sharepoint"
-
+		self.__get_regexs=getregexs
+		self.regexs=regexs
+#		SearchSharepoint=False
+#		SearchFindit=False
+#		SearchMail=False
 
 		self.defaults=Shared.read_defaults(defaultsFile,credentialsHead)
 		if credentialsFile is None:
@@ -29,14 +41,26 @@ class SharepointSearch():
 		self.tokenCacheFile=Shared.abs_path(credentialsFile)
 
 		self.credentials=Shared.read_credentials(credentialsFile,credentialsHead)
-
 		self.define_configs()
 		self.setTokenCache()
+		self.keywords=keywords
 		keywords=self.combine_keywords(keywords)
+		self.share_point_scopes=self.defaults['Scopes']
+		self.findit_scopes=self.defaults['Findit']['Scopes']
 		if SearchSharepoint:
-			self.search_sharepoint(scope=["Sites.Read.All"],keywords=keywords)
+			results=self.get_results_tp(scope=self.share_point_scopes,keywords=keywords,search_func=self.search_sharepoint)
+			self.get_matching_results_tp("Sharepoint", results,regexs,search_regex_func=self.search_regexp_sharepoint,print_results_func=self.printResultsSharepoint)
 		if SearchFindit:
-			self.search_findit(scope=["https://armh.sharepoint.com/Sites.Read.All"], keywords=keywords)
+			DebugMsg("Search findit")
+			results=self.search_findit(scope=self.findit_scopes, keywords=keywords)
+			header="Wiki results matching the search query"
+			self.printResults(results,header,print_results_func=self.printResultsFindit)
+		if SearchMail:
+			DebugMsg("Search Mail")
+#			self.search_mail(scope=["Sites.Read.All"], keywords=keywords)
+			results=self.get_results_tp(scope=self.share_point_scopes,keywords=keywords,search_func=self.search_mail)
+			self.get_matching_results_tp("Email", results,regexs,search_regex_func=self.search_regexp_mail,print_results_func=self.printResultsMail)
+	
 	
 	def combine_keywords(self,keywords):
 		tmp=[]
@@ -51,11 +75,10 @@ class SharepointSearch():
 								"authority": "https://login.microsoftonline.com/" + self.credentials['tenant_id']  ,
 								"client_id": self.credentials['client_id'],
 								}
-#        "scope": ["Sites.Read.All", "https://armh.sharepoint.com/Sites.Read.All"]
 
 		self.config["endpoints"]={
-			"sharepoint": "https://graph.microsoft.com/v1.0/search/query",
-			"findit" : "https://armh.sharepoint.com/_api/search/query"
+			"sharepoint": self.defaults['EndPoint'],
+			"findit" : self.defaults['Findit']['EndPoint']
 		}
 
 
@@ -124,7 +147,58 @@ class SharepointSearch():
 			
 	# Hint: The following optional line persists only when state changed
 
-	def search_sharepoint(self,scope,keywords):
+	def search_mail(self,scope,keywords,max_results_per_iter=10,start_at=0):
+		self.acquire_token(self.share_point_scopes)   ##  this will update the token info
+		headers={'Authorization': 'Bearer ' + self.token_info['access_token'],
+		"Content-Type" : "application/json"
+		}
+
+		params=None
+		data={
+			"requests": [
+				{
+					"entityTypes": [
+						"message"
+					],
+					"query": {
+						"queryString": keywords 
+					},
+					"from": start_at,
+					"size": max_results_per_iter
+				}
+			]
+		}
+					#"fields" : ["parentReference","webUrl"],
+		graph_data = requests.post(
+			self.config["endpoints"]["sharepoint"],
+			headers=headers,
+			params=params,
+			data=json.dumps(data)
+		)
+			#data=json.dumps(data)
+		content=json.loads(graph_data.content)
+#		pprint.pprint(content)
+		results={}
+		subjects=set()
+		
+		if 'value' in content:
+			if 'hits' in content['value'][0]['hitsContainers'][0]: 
+				for x in content['value'][0]['hitsContainers'][0]['hits']:
+					weburl=re.sub(" ","%20",x['resource']['webLink'])
+					requests.get(weburl,headers=headers)
+					#weburl=weburl.replace("&viewmodel=ReadMessageItem","")
+
+					subject=x['resource']['subject']
+					if weburl in results or subject in subjects: 
+						DebugMsg("URL %s already exists, not added" % weburl)
+					else:
+						id=x['hitId']
+						url='https://graph.microsoft.com/v1.0/me/messages/' + id + '/$value'
+						results[weburl]=[subject,url]
+						subjects.add(subject)
+		return results
+         
+	def search_sharepoint(self,scope,keywords,max_results_per_iter,start_at):
 		self.acquire_token(scope)   ##  this will update the token info
 		headers={'Authorization': 'Bearer ' + self.token_info['access_token'],
 		"Content-Type" : "application/json"
@@ -138,7 +212,7 @@ class SharepointSearch():
 						"driveItem"
 					],
 					"query": {
-						"queryString": keywords + " filetype:docx OR filetype:doc OR filetype:pptx OR filetype:ppt"
+						"queryString": keywords + " filetype:docx OR filetype:doc OR filetype:pptx OR filetype:ppt OR filetype:pdf"
 					},
 					"sortProperties": [
 						{
@@ -146,15 +220,12 @@ class SharepointSearch():
 							"isDescending": "true"
 						}
 					],
-					"fields" : ["webUrl"],
-					"from": 0,
-					"size": 50
+					"from": start_at,
+					"size": max_results_per_iter
 				}
 			]
 		}
-		#headers={'Authorization': 'Bearer ' + result['access_token']},
-			# Calling graph using the access token
-				# Use token to call downstream service
+					#"fields" : ["parentReference","webUrl"],
 		graph_data = requests.post(
 			self.config["endpoints"]["sharepoint"],
 			headers=headers,
@@ -163,13 +234,41 @@ class SharepointSearch():
 		)
 			#data=json.dumps(data)
 		content=json.loads(graph_data.content)
-#        pprint.pprint(content)
+		#pprint.pprint(content)
+		results={}
+		
 		if 'value' in content:
 			if 'hits' in content['value'][0]['hitsContainers'][0]: 
 				for x in content['value'][0]['hitsContainers'][0]['hits']:
-					print(re.sub(" ","%20",x['resource']['webUrl']))
-		else:
-			print(content)
+					weburl=re.sub(" ","%20",x['resource']['webUrl'])
+					if weburl in results:
+						DebugMsg("URL %s already exists, not added" % weburl)
+						continue
+
+					driveId=x['resource']['parentReference']['driveId']
+					id=x['resource']['parentReference']['id']
+					siteId=x['resource']['parentReference']['siteId'].split(",")[1]
+					listId=x['resource']['parentReference']['sharepointIds']['listId']
+					listItemUId=x['resource']['parentReference']['sharepointIds']['listItemUniqueId']
+					listItemId=x['resource']['parentReference']['sharepointIds']['listItemId']
+					headers={'Authorization': 'Bearer ' + self.token_info['access_token'],
+						'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9',
+						'Accept-Language': 'en-US,en;q=0.9'
+					}
+					
+					url='https://graph.microsoft.com/v1.0/sites/' + siteId + '/lists/' + listId + '/items/' + listItemId + '/driveItem'
+#					print(url)
+					response = requests.get(url, headers=headers)
+					if (response.ok):
+						x=json.loads(response.content)
+						results[weburl]=x['@microsoft.graph.downloadUrl']
+						#print("####################")
+					else:
+						results[weburl]=None
+						#print(weburl)
+					#print("####")
+		return results
+         
 
 	def search_findit(self,scope,keywords):
 		self.acquire_token(scope)   ##  this will update the token info
@@ -177,15 +276,17 @@ class SharepointSearch():
 		headers={'Authorization': 'Bearer ' + self.token_info['access_token'],
 		"Content-Type" : "application/json"
 		}
-		
+
 		url= self.config["endpoints"]["findit"] + "?querytext=" + urllib.parse.quote_plus("'"+ keywords + "'")
 		graph_data = requests.get(
 			url,
 			headers=headers,
 		)
 			#data=json.dumps(data)
+		DebugMsg2(graph_data.content)
 
-		urls=[]
+#		urls=[]
+		results=[]
 		if b'xml version=' in graph_data.content:
 			returned_urls=re.findall(b"https:.*?<",graph_data.content)
 			for url in returned_urls:
@@ -194,85 +295,220 @@ class SharepointSearch():
 				#print(tmp)
 				tmp=re.sub("<.*","",tmp)
 				tmp=re.sub("\?.*","",tmp)
-				if "sharepoint.com" not in tmp and tmp not in urls:
-					urls.append(tmp)
-			if len(urls)>0:
-				for url in urls:
-					Info(url,print_dt=False)
+				if "sharepoint.com" not in tmp and tmp not in results:
+					results.append(tmp)
+			#if len(urls)>0:
+			#	for url in urls:
+			#		results.append(url)
+#					Info(url,print_dt=False)
 		else:
 			print(graph_data.content)
+		return results
 
-	def search_findit_org(self,scope,keywords):
-		self.acquire_token(scope)   ##  this will update the token info
 
+
+
+	def get_docx_text(self,document):
+		"""
+		Take the path of a docx file as argument, return the text in unicode.
+		"""
+		WORD_NAMESPACE = '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}'
+		PARA = WORD_NAMESPACE + 'p'
+		TEXT = WORD_NAMESPACE + 't'
+		xml_content = document.read('word/document.xml')
+		document.close()
+		tree = XML(xml_content)
+
+		paragraphs = []
+		for paragraph in tree.iter(PARA):
+			texts = [node.text
+					for node in paragraph.iter(TEXT)
+					if node.text]
+			if texts:
+				paragraphs.append(''.join(texts))
+
+		return '\n\n'.join(paragraphs)
+
+
+			#print("Graph API call result: %s" % json.dumps(graph_data, indent=2))
+
+	def get_results_tp(self,scope, keywords,search_func):
+		max_results=20
+		max_results_per_iter=5
+		start_ats=[]
+		for i in range(0,int(max_results/max_results_per_iter)):
+			start_ats.append(max_results_per_iter*i)
+
+		max_threads=10
+		with ThreadPoolExecutor(max_workers=max_threads) as exe:
+			fp=functools.partial(search_func,
+									scope, keywords,
+									max_results_per_iter)
+			results_iters=exe.map(fp,start_ats)
+
+		results_dic={}
+		results=[]
+	#	print(results_iters)
+	#	print(results_dic)
+		for results_iter in results_iters:
+			results_dic.update(results_iter)
+
+		for result in results_dic:
+			results.append([result,results_dic[result]])
+		### results will be a list of lists, where each element has webUrl : download Url
+			
+		DebugMsg("Number of results : " + str(len(results)))
+		return results
+
+	def __search_regexp_tp(self,regexs,search_regex_func,matched_results,not_matched_results,other_info,result):
+		#with self.__sema:
+		DebugMsg2( "Thread Started = " )
+		if search_regex_func(result,regexs):
+			matched_results.append(result)
+		else:
+			not_matched_results.append(result)
+		
+
+	def get_matching_results_tp(self,source,results,regexs,search_regex_func,print_results_func):
+		matched_results=[]
+		not_matched_results=[]
+		max_threads=10
+		DebugMsg("get_matching_results_tp %d" % len(results))
+		with ThreadPoolExecutor(max_workers=max_threads) as exe:
+			fp=functools.partial(self.__search_regexp_tp,
+									regexs,
+									search_regex_func,
+									matched_results,
+									not_matched_results,
+									{'thread':'??'})
+			exe.map(fp,results)
+		self.__printresults(source,results,matched_results,not_matched_results,print_results_func)
+
+	def __printresults(self,source,results,matched_results,not_matched_results,print_results_func):
+		DebugMsg("print_results len_matched_results=%d len_unmatched_results=%d" % (len(matched_results),len(not_matched_results)))
+		header=""
+
+		if len(matched_results)>0 :
+			if len(not_matched_results)>0 and len(matched_results)< 5:
+				header=source + " results NOT exactly matching the search query"
+		elif len(results)>0:
+			header="No " + source + " results matched the exact regex"
+
+		if len(matched_results)< 5:
+			self.printResults(not_matched_results,header,print_results_func)
+		
+		if len(matched_results)>0:
+			header=source +  " results exactly matching the search query"
+			self.printResults(matched_results,header,print_results_func)
+
+
+
+	def printResults(self,results,header,print_results_func):
+		if len(results)>0:
+			results=results.copy()
+			results.reverse
+			DebugMsg("\n\n################## Results ###################################",print_dt=False)
+			Info("\n################## " + header + " " + "###################################",print_dt=False)
+			i=0
+			for result in results:
+				i+=1
+				print_results_func(i,  result)
+
+			DebugMsg("################## Results Ends ###################################\n\n",print_dt=False)
+			sys.stdout.flush()
+
+	def printResultsMail(self,i,result):
+		Info(str(i) + ") Mail_Subject -> " + result[1][0] + " -- Link --> " + result[0],print_dt=False)
+
+	def printResultsSharepoint(self,i,result):
+			Info(str(i) + ") " + result[0],print_dt=False)
+
+	def printResultsFindit(self,i,result):
+			Info(str(i) + ") " + result,print_dt=False)
+
+	def search_regexp_mail(self,result,regexs):
+		 ## if downloadurl is none, return false
 		headers={'Authorization': 'Bearer ' + self.token_info['access_token'],
 		"Content-Type" : "application/json"
 		}
-		params = (
-			('querytext', keywords),
-		)
-		#params = (
-		#    ('querytext', '\'ESPCV\''),
-		#)
-		data=json.dumps(
-				{
-					"requests": [
-						{
-							"entityTypes": [
-								"driveItem"
-							],
-							"query": {
-								"queryString": keywords
-							},
-							"from": 0,
-							"size": 20
-						}
-					]
-				}
-			)
-		data=None
-		#headers={'Authorization': 'Bearer ' + result['access_token']},
-			# Calling graph using the access token
-				# Use token to call downstream service
-		graph_data = requests.get(
-			self.config["endpoints"]["findit"],
-			headers=headers,
-			params=params,
-			data=data
-		)
-			#data=json.dumps(data)
 
-		urls=[]
-		returned_urls=re.findall(b"<d:Value>https:.*?<",graph_data.content)
-		for url in returned_urls:
-			tmp=url.decode("utf-8") 
-			print("####1")
-			pprint.pprint(tmp)
-			tmp=re.sub("^<d:Value>","",tmp)
-			tmp=re.sub("\s.*","",tmp)
-			print("####2")
-			pprint.pprint(tmp)
-			tmp=re.sub("<.*","",tmp)
-			print("####3")
-			pprint.pprint(tmp)
-			tmp=re.sub("\?.*","",tmp)
-			print("####4")
-			pprint.pprint( tmp)
-			print("####5")
-			if "sharepoint.com" not in tmp and tmp not in urls and "http" in tmp:
-				urls.append(tmp)
-		if len(urls)>0:
-			pprint.pprint(urls)
-		else:
-			print(graph_data.content)
-		sys.stdout.flush()
+		DebugMsg2("Regexes %s" % str(regexs))
+		if result[1] is None: 
+			return False
 
-			#print("Graph API call result: %s" % json.dumps(graph_data, indent=2))
+		## keywords is added only if some keywords has more than one word
+		keywords=[]
+		for keyword in self.keywords:
+			keyword=keyword.strip()
+			if re.search("\s",keyword) or re.search("\W",keyword):
+				keywords.append(keyword)
+
+		found=True
+		DebugMsg("Finding Regexes in Mail")
+		if len(self.__get_regexs + regexs + keywords )> 0:
+			found=False
+#			print(result[1][1])
+			r= requests.get(result[1][1], headers=headers)
+			parsed = parser.from_buffer(r.content)
+			#print(parsed["content"]) # To get the content of the file
+
+			for pattern in self.__get_regexs:
+				#            DebugMsg("Pattern", pattern)
+				found=False
+				
+				s1=re.search(pattern,parsed["content"],re.IGNORECASE)
+				if s1:
+					DebugMsg(result[0],s1.group(0))
+
+
+			for pattern in (regexs + keywords):
+				found=False
+				if re.search(pattern,parsed["content"],re.IGNORECASE):
+					found=True
+				if not found:
+					return False
+		return found
+
+	def search_regexp_sharepoint(self,result,regexs):
+		 ## if downloadurl is none, return false
+		if result[1] is None: 
+			return False
+
+		## keywords is added only if some keywords has more than one word
+		keywords=[]
+		for keyword in self.keywords:
+			keyword=keyword.strip()
+			if re.search("\s",keyword) or re.search("\W",keyword):
+				keywords.append(keyword)
+
+		found=True
+		DebugMsg("Finding Regexes %s" % str(regexs))
+		if len(self.__get_regexs + regexs + keywords )> 0:
+			found=False
+			r = requests.get(result[1])   ## download url
+			parsed = parser.from_buffer(r.content)
+			#print(parsed["content"]) # To get the content of the file
+
+			for pattern in self.__get_regexs:
+				#            DebugMsg("Pattern", pattern)
+				found=False
+				s1=re.search(pattern,parsed["content"],re.IGNORECASE)
+				if s1:
+					DebugMsg(result[0],s1.group(0))
+
+
+			for pattern in (regexs + keywords):
+				found=False
+				if re.search(pattern,parsed["content"],re.IGNORECASE):
+					found=True
+				if not found:
+					return False
+		return found
 
 
 if __name__ == "__main__":
 
-	argparser = argparse.ArgumentParser(description="Jira")
+	argparser = argparse.ArgumentParser(description="SharepointSearch")
 	argparser.add_argument('keywords', nargs='+')
 	argparser.add_argument('-credentialsFile', default=None)
 	argparser.add_argument(
@@ -290,7 +526,7 @@ if __name__ == "__main__":
 	args = argparser.parse_args()
 	# print(args)
 	Logging.debug=args.debug
-	SharepointSearch(keywords=args.keywords,credentialsFile=args.credentialsFile)
+	SharepointSearch(keywords=args.keywords,credentialsFile=args.credentialsFile,regexs=args.regex)
 
 
 # %%

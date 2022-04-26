@@ -10,7 +10,7 @@ import functools
 
 import datetime as dt
 import jira
-from Shared import Logging,DebugMsg,Info,Shared
+from Shared import Logging,DebugMsg,DebugMsg2,Info,Shared,Error
 import threading
 from concurrent.futures import ThreadPoolExecutor
 
@@ -32,14 +32,15 @@ class Jira:
 		defaultsFile = Shared.defaultsFilePath
 
 		if credentialsHead is None:
-			credentialsHead="JiraCloud"
+			credentialsHead="Jira"
 
 		self.defaults=Shared.read_defaults(defaultsFile,credentialsHead)
 		if credentialsFile is None:
 			credentialsFile = self.defaults["CredentialsFile"]
 
 		self.credentials=Shared.read_credentials(credentialsFile,credentialsHead)
-
+		if not Shared.validUnixCredentials(self.credentials["username"],self.credentials["token"]):
+			Error("Invalid Unix Credentials")
 
 		if not Shared.isVpnConnected(self.credentials["server"]):
 			return
@@ -61,6 +62,7 @@ class Jira:
 		if customJquery is not None and re.match(".*\S.*",customJquery):
 			jql_query=customJquery
 		else:
+			jql_query+= "("
 			for keyword in self.keywords:
 				if i> 0:
 					jql_query+= " AND "
@@ -72,6 +74,16 @@ class Jira:
 			jql_query+= " OR ("
 			jql_query+= "(comment ~ \"" + " ".join(self.keywords) + "\" OR text ~ \"" + " ".join(self.keywords) + "\")"
 			jql_query+= ")"
+			jql_query+= ") AND ("
+			i=0
+			jql_query+= "project in (" 
+			for project in self.defaults['projects']:
+				if i > 0:
+					jql_query+= ","
+				i+=1
+				jql_query+= project
+			jql_query+= "))"
+
 			jql_query += appendInJquery
 			jql_query +=" ORDER BY updatedDate DESC"
 		return jql_query
@@ -134,8 +146,8 @@ class Jira:
 
 	def get_issues_tp(self,jql_query):
 		DebugMsg("Jql_query = " + jql_query)
-		max_results=200
-		max_results_per_iter=40
+		max_results=50
+		max_results_per_iter=20
 		start_ats=[]
 		for i in range(0,int(max_results/max_results_per_iter)):
 			start_ats.append(max_results_per_iter*i)
@@ -151,7 +163,10 @@ class Jira:
 		for issues_iter in issues_iters:
 			issues=issues + issues_iter
 
-		DebugMsg("Number of issues : " + str(len(issues)))
+		limit_msg=""
+		if len(issues) == max_results:
+			limit_msg=" (Max Limit reached)"
+		DebugMsg("Number of issues : " + str(len(issues)) + limit_msg)
 		return issues
 
 	def get_issues(self,jql_query):
@@ -177,11 +192,11 @@ class Jira:
 		DebugMsg("Number of issues : " + str(len(issues)))
 		return issues
 
-	def printIssues(self,issues):
+	def printIssues(self,issues,header=""):
 		if len(issues)>0:
 			issues=issues.copy()
 			issues.reverse
-			DebugMsg("\n\n################## Jira Issues ###################################",print_dt=False)
+			Info("\n################## " + header + " " + "###################################",print_dt=False)
 			i=0
 			for issue in issues:
 				i+=1
@@ -192,36 +207,37 @@ class Jira:
 						DebugMsg("Commented by " + str(comment.author) + " on " + comment.created,print_dt=False)
 						DebugMsg("####################################################################################",print_dt=False)
 						DebugMsg(comment.body,print_dt=False)
-					DebugMsg("\n#####################################################\n",print_dt=False)
-			DebugMsg("################## Jira Issues Ends ###################################\n\n",print_dt=False)
+					DebugMsg("#####################################################",print_dt=False)
+			DebugMsg("################## Ends ###################################",print_dt=False)
 			sys.stdout.flush()
 
 
 
 	def __search_regexp(self,issue,regexs,matched_issues,not_matched_issues,other_info):
 		#with self.__sema:
-		DebugMsg("Thread Started = " + str(other_info['thread']))
+		#DebugMsg2("Thread Started = " + str(other_info['thread']))
 		DebugMsg( threading.current_thread().ident)
 		if self.search_regexp(issue,regexs):
 			matched_issues.append(issue)
 		else:
 			not_matched_issues.append(issue)
-		DebugMsg("Thread Ended= " + str(other_info['thread']))
+		#DebugMsg2("Thread Ended= " + str(other_info['thread']))
 		DebugMsg( threading.current_thread().ident)
 
 	def __search_regexp_tp(self,regexs,matched_issues,not_matched_issues,other_info,issue):
 		#with self.__sema:
-		DebugMsg( "Thread Started = " + str(threading.current_thread().ident) + " : " + str( issue.key))
+		#DebugMsg2( "Thread Started = " + str(threading.current_thread().ident) + " : " + str( issue.key))
 		if self.search_regexp(issue,regexs):
 			matched_issues.append(issue)
 		else:
 			not_matched_issues.append(issue)
-		DebugMsg( "Thread Ended = " + str(threading.current_thread().ident) + " : " + str( issue.key))
+		#DebugMsg2( "Thread Ended = " + str(threading.current_thread().ident) + " : " + str( issue.key))
 
 	def get_matching_issues_tp(self,issues,regexs):
 		matched_issues=[]
 		not_matched_issues=[]
 		max_threads=10
+		DebugMsg("Finding Regex")
 		with ThreadPoolExecutor(max_workers=max_threads) as exe:
 			fp=functools.partial(self.__search_regexp_tp,
 									regexs,
@@ -273,27 +289,19 @@ class Jira:
 		self.__printIssues(issues,matched_issues,not_matched_issues)
 
 	def __printIssues(self,issues,matched_issues,not_matched_issues):
-
+		header=""
 		if len(matched_issues)>0 :
 			if len(not_matched_issues)>0 and len(matched_issues)< 5:
-				DebugMsg("####################################################################################")
-				DebugMsg("###### Jira issues not exactly matching the search query ###########")
-				DebugMsg("####################################################################################")
+				header="Jira issues NOT exactly matching the search query"
 		elif len(issues)>0:
-			DebugMsg("")
-			DebugMsg("###### No Jira issues matched the exact regex. ###########")
+			header="No Jira issues matched the exact regex"
 
 		if len(matched_issues)< 5:
-			self.printIssues(not_matched_issues)
-		#elif len(matched_issues) >  50:
-			#self.printIssues(matched_issues)
-			#raise ValueError("Too many results found (" + str(len(issues)) + "). Only 1st 50 results shown. Please add more filters in jql query or add regex to reduce the results")
+			self.printIssues(not_matched_issues,header)
 
 		if len(matched_issues)>0:
-			DebugMsg("####################################################################################")
-			DebugMsg("###### Jira issues matching the search query ###### ")
-			DebugMsg("####################################################################################")
-			self.printIssues(matched_issues)
+			header="Jira issues exactly matching the search query"
+			self.printIssues(matched_issues,header)
 
 
 

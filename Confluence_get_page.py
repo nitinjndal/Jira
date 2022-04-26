@@ -8,7 +8,7 @@ import json
 
 import datetime as dt
 import atlassian 
-from Shared import Logging,DebugMsg,Info,Shared
+from Shared import Logging,DebugMsg,DebugMsg2,Info,Shared
 from concurrent.futures import ThreadPoolExecutor
 import functools
 
@@ -97,10 +97,11 @@ class Confluence:
 			for pattern in (regexs + keywords):
 				found=False
 				if re.search(pattern,content,re.IGNORECASE):
-					DebugMsg("Found ", pattern )
+					DebugMsg2("Found ", pattern )
 					found=True
 				else:
-					DebugMsg("Not Found ", pattern )
+					DebugMsg2("Not Found ", pattern )
+
 
 
 				if not found:

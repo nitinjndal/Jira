@@ -5,6 +5,7 @@
 import os,stat
 import argparse
 import json
+import re
 # %%
 from cryptography.fernet import Fernet
 
@@ -22,8 +23,8 @@ def load_key():
     Load the previously generated key
     """
     key_path=os.path.dirname(__file__) + "/enc.key"
-   # if not os.path.exists(key_path):
-   #     generate_key() # execute only once 
+    # if not os.path.exists(key_path):
+    #     generate_key() # execute only once
     return open(key_path, "rb").read()
 
 
@@ -31,6 +32,7 @@ def encrypt_message(message):
     """
     Encrypts a message
     """
+
     key = load_key()
     encoded_message = message.encode()
     f = Fernet(key)
@@ -72,7 +74,7 @@ def decrypt_file(filename):
         f.write(message)
 
 
-    
+
 #%%
 
 
@@ -97,7 +99,9 @@ def write_credentials_File(filename,jsondata):
     string=encrypt_message(string)
     with open(filename,"wb") as f:
         f.write(string)
-    
+    os.chmod(filename,stat.S_IRWXU)
+
+
 # %%
 
 
