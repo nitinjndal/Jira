@@ -166,3 +166,6 @@ test.py
 /defaults.json
 lib64
 enc.key
+nltk_data/
+Dec.py
+copy_py

@@ -4,11 +4,12 @@ import os
 import re
 import argparse
 import json
-
+import nltk
+from nltk.corpus import stopwords
 
 import datetime as dt
 import atlassian 
-from Shared import Logging,DebugMsg,DebugMsg2,Info,Shared,Error
+from Shared import Logging,DebugMsg,DebugMsg2,Info,Shared,Error,bold,boldr
 from concurrent.futures import ThreadPoolExecutor
 import functools
 
@@ -60,7 +61,7 @@ class Confluence:
 			return False
 		else:
 			return True
-     
+	 
 	def get_page(self,pageid):
 		page=self.confluence.get_page_by_id(page_id=pageid,expand='body.view')
 		html_output=page['body']['view']['value']
@@ -68,6 +69,7 @@ class Confluence:
 
 
 	def create_cql(self,customCquery=None, appendInCquery=""):
+		en_stops = set(stopwords.words('english'))
 		# keywords=["abc", "def"]
 		i=0
 		cql_query=""
@@ -75,11 +77,14 @@ class Confluence:
 			cql_query=customCquery
 		else:
 			cql_query="("
-			for keyword in self.keywords:
-				if i> 0:
-					cql_query+= " AND "
-				cql_query+= "(title ~ \"\\\"" + keyword + "\\\"\" OR text ~ \"\\\"" + keyword + "\\\"\")"
-				i+=1
+			for keyword1 in self.keywords:
+				ks=keyword1.split(" ")
+				for keyword in ks:
+					if keyword not in en_stops:
+						if i> 0 :
+							cql_query+= " AND "
+						cql_query+= "(title ~ \"\\\"" + keyword + "\\\"\" OR text ~ \"\\\"" + keyword + "\\\"\")"
+						i+=1
 			if re.match(".*\S",appendInCquery) and (not (re.match("^\s*AND",appendInCquery) or re.match("^\s*OR",appendInCquery))):
 				appendInCquery=" AND " + appendInCquery
 
@@ -114,9 +119,10 @@ class Confluence:
 			page=self.confluence.get_page_by_id(page_id=id,expand='body.view')
 			html_output=page['body']['view']['value']
 			content=Shared.html_to_plain_text(html_output)
-#			DebugMsg("content=",content)
+
+			DebugMsg("Finding Regex %s in page %s" %( self.__get_regexs,result['content']['title']))
+			DebugMsg("content=",content)
 			for pattern in self.__get_regexs:
-				#            DebugMsg("Pattern", pattern)
 				found=False
 				s1=re.search(pattern,content,re.IGNORECASE)
 				if s1:
@@ -124,17 +130,19 @@ class Confluence:
 
 			found=False
 			for pattern in (regexs + keywords):
+				DebugMsg("Finding Pattern %s in page %s" %( pattern,result['content']['title']))
 				found=False
 				if re.search(pattern,content,re.IGNORECASE):
-					DebugMsg2("Found ", pattern )
+					DebugMsg("Found ", pattern )
 					found=True
 				else:
-					DebugMsg2("Not Found ", pattern )
+					DebugMsg("Not Found ", pattern )
 
 
 				if not found:
 					return False
 		else:
+			DebugMsg("Not page, type= %s in page %s" %( result['content']['type'],result['content']['title']))
 			return False
 
 		return found
@@ -186,11 +194,11 @@ class Confluence:
 
 	def printResults(self,results,header):
 		if len(results)>0:
-			Info("\n################## " + header + " " + "###################################",print_dt=False)
+			Info(boldr("\n################## " + header + " " + "###################################"),print_dt=False)
 			i=0
 			for result in results:
 				i+=1
-				printval=result['content']['title'] + " -- Link --> " + self.credentials["server"] + result['url']
+				printval=bold(result['content']['title']) + " -- Link --> " + self.credentials["server"] + result['url']
 				Info(str(i) + ") " + printval,print_dt=False)
 			DebugMsg("################## Confluence Results Ends ###################################\n\n",print_dt=False)
 
@@ -222,9 +230,9 @@ class Confluence:
 		header=""
 		if len(matched_results)>0 :
 			if len(not_matched_results)>0 and len(matched_results)< 5:
-				header="Confluence results NOT exactly matching the search query"
+				header="No Confluence results matched the exact sentence/regex. Showing results from native search"
 		elif len(results)>0:
-			header="Confluence results matched the exact regex"
+			header="Confluence results from the native search query"
 
 		if len(matched_results)< 5:
 			self.printResults(not_matched_results,header)

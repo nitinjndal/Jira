@@ -10,7 +10,7 @@ import functools
 
 import datetime as dt
 import jira
-from Shared import Logging,DebugMsg,DebugMsg2,Info,Shared,Error
+from Shared import Logging,DebugMsg,DebugMsg2,Info,Shared,Error,bold,boldr
 import threading
 from concurrent.futures import ThreadPoolExecutor
 
@@ -196,11 +196,11 @@ class Jira:
 		if len(issues)>0:
 			issues=issues.copy()
 			issues.reverse
-			Info("\n################## " + header + " " + "###################################",print_dt=False)
+			Info(boldr("\n################## " + header + " " + "###################################"),print_dt=False)
 			i=0
 			for issue in issues:
 				i+=1
-				Info(str(i) + ") " + issue.permalink() + "\t" + issue.fields.summary,print_dt=False)
+				Info(str(i) + ")" + bold(" " + issue.permalink() + " ") + "\t" + issue.fields.summary,print_dt=False)
 				if self.expand_comments:
 					for comment in self.jira.comments(issue):
 						DebugMsg("####################################################################################",print_dt=False)
@@ -292,15 +292,15 @@ class Jira:
 		header=""
 		if len(matched_issues)>0 :
 			if len(not_matched_issues)>0 and len(matched_issues)< 5:
-				header="Jira issues NOT exactly matching the search query"
+				header="No Jira results matched the exact sentence/regex. Showing results from native search"
 		elif len(issues)>0:
-			header="No Jira issues matched the exact regex"
+			header="Jira results from the native search query"
 
 		if len(matched_issues)< 5:
 			self.printIssues(not_matched_issues,header)
 
 		if len(matched_issues)>0:
-			header="Jira issues exactly matching the search query"
+			header="Jira results exactly matching the search query"
 			self.printIssues(matched_issues,header)
 
 

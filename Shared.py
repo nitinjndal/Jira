@@ -49,11 +49,11 @@ def DebugMsg(msg1,msg2="",printmsg=True,ForcePrint=False,print_dt=True,error=Fal
 				print(dt.datetime.now().strftime("%c"),end=": " )
 				if Logging.ConsoleLogFile is not None:
 					Logging.ConsoleLogFile.write(dt.datetime.now().strftime("%c") + ": ")
-		print(str(msg1).encode('utf-8',errors='ignore').decode('charmap',errors='ignore'),end=" " )
+		print(str(msg1).encode('utf-8',errors='ignore').decode('charmap',errors='ignore'),end=" ", flush=True )
 		if Logging.ConsoleLogFile is not None:
 			Logging.ConsoleLogFile.write(str(msg1).encode('utf-8',errors='ignore').decode('charmap',errors='ignore') + " ")
 		if msg2 is not None:
-			print(str(msg2).encode('utf-8',errors='ignore').decode('charmap',errors='ignore'))
+			print(str(msg2).encode('utf-8',errors='ignore').decode('charmap',errors='ignore'), flush=True)
 			if Logging.ConsoleLogFile is not None:
 				Logging.ConsoleLogFile.write(str(msg2).encode('utf-8',errors='ignore').decode('charmap',errors='ignore') + "\n")
 		else:
@@ -80,6 +80,12 @@ def Info(msg1,msg2=None,printmsg=True,ForcePrint=False,print_dt=True):
 
 def Error(msg1,msg2=None,printmsg=True,ForcePrint=False,print_dt=True):
 	DebugMsg(msg1,msg2,printmsg,True,print_dt,error=True)
+
+def bold(msg):
+    return  "\033[1m" + msg + "\033[0m"
+
+def boldr(msg):
+    return  "\033[1;7m" + msg + "\033[0m"
 
 class Shared:
 	defaultsFilePath=os.path.dirname(os.path.abspath(__file__)) + "/defaults.json"
@@ -190,6 +196,11 @@ class Shared:
 		return True
 	
 	def html_to_plain_text(html_string):
+		soup = BeautifulSoup(html_string,features="lxml")
+		text=soup.get_text('\n')
+		return text
+
+	def html_to_plain_text2(html_string):
 		markdown_string=html2text.html2text(html_string)
 		#""" Converts a markdown string to plaintext """
 

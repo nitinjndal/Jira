@@ -1,8 +1,11 @@
 #! /usr/bin/env python
 #
-from Shared import Logging, DebugMsg, Info, Error,Shared
-Info("Started ")
+import datetime as dt
+begin_time = dt.datetime.now()
+print(begin_time.strftime("%c") + " \nSearching ...", flush=True)
+from Shared import Logging, DebugMsg, Info, Error,Shared,bold
 import logging
+import time
 import sys
 import os
 import re
@@ -10,7 +13,6 @@ import argparse
 import json
 import getpass 
 # %%
-import datetime as dt
 import Jira
 import SharepointSearch
 import Confluence
@@ -38,7 +40,7 @@ class UniSearch:
                  customCquery=None,
                  getregexs=[]):
 
-        begin_time = dt.datetime.now()
+        DebugMsg("Getting Token Sites1")
         defaultsFile = Shared.defaultsFilePath
         credentialsHead = "UniSearch"
         self.defaults = Shared.read_defaults(defaultsFile, credentialsHead)
@@ -51,6 +53,14 @@ class UniSearch:
 
         creds= Shared.read_credentials_File(self.credentialsFile)
 
+        DebugMsg("Getting Token Sites1")
+        acquire_token_flow=SharepointSearch.SharepointSearch(credentialsFile=self.credentialsFile, keywords=[],SearchSharepoint=False,SearchFindit=False,SearchMail=False)
+        DebugMsg("Getting Token Sites")
+        acquire_token_flow.acquire_token(scope=["Sites.Read.All","Mail.Read"])
+        time.sleep(1)
+        DebugMsg("Getting Token SSites")
+        acquire_token_flow.acquire_token(scope=["https://armh.sharepoint.com/Sites.Read.All"])
+
         if not Shared.validUnixCredentials(getpass.getuser(),creds['Jira']['credentials']['token']):
             username,unix_passw=self.getInputUnixCredentials()
             creds=Shared.updateCredentialsJson(unix_passw=unix_passw,jsondata=creds)
@@ -61,8 +71,6 @@ class UniSearch:
             creds=Shared.updateCredentialsJson(conf_token=confluence_token,jsondata=creds)
             Shared.update_credentials(self.credentialsFile,creds)
 
-        acquire_token_flow=SharepointSearch.SharepointSearch(credentialsFile=self.credentialsFile, keywords=[],SearchSharepoint=False,SearchFindit=False,SearchMail=False)
-        acquire_token_flow.acquire_token(scope=["Sites.Read.All"])
 
 
         #	JiraCloudThread = threading.Thread(target=Jira.Jira,
@@ -182,7 +190,6 @@ class UniSearch:
 
 if __name__ == "__main__":
 
-    ConsoleLogFile = open("./console.log", "w")
     argparser = argparse.ArgumentParser(description="Jira")
     argparser.add_argument('keywords', nargs='+')
     argparser.add_argument("-regex",
@@ -254,5 +261,4 @@ if __name__ == "__main__":
               customCquery=args.customCquery,
               getregexs=args.getregex)
 
-    ConsoleLogFile.close()
 # %%

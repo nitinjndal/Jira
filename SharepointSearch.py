@@ -14,7 +14,7 @@ import  atexit
 import urllib.parse
 import argparse
 import datetime as dt
-from Shared import Logging,DebugMsg,DebugMsg2,Info,Shared
+from Shared import Logging,DebugMsg,DebugMsg2,Info,Shared,bold,boldr
 import  zipfile, io
 from tika import parser
 try:
@@ -177,7 +177,7 @@ class SharepointSearch():
 		)
 			#data=json.dumps(data)
 		content=json.loads(graph_data.content)
-#		pprint.pprint(content)
+	##	pprint.pprint(content)
 		results={}
 		subjects=set()
 		
@@ -390,9 +390,9 @@ class SharepointSearch():
 
 		if len(matched_results)>0 :
 			if len(not_matched_results)>0 and len(matched_results)< 5:
-				header=source + " results NOT exactly matching the search query"
+				header=source + " results from the native search query"
 		elif len(results)>0:
-			header="No " + source + " results matched the exact regex"
+			header="No " + source + " results matched the exact sentence/regex. Showing results from native search"
 
 		if len(matched_results)< 5:
 			self.printResults(not_matched_results,header,print_results_func)
@@ -408,7 +408,7 @@ class SharepointSearch():
 			results=results.copy()
 			results.reverse
 			DebugMsg("\n\n################## Results ###################################",print_dt=False)
-			Info("\n################## " + header + " " + "###################################",print_dt=False)
+			Info(boldr("\n################## " + header + " " + "###################################"),print_dt=False)
 			i=0
 			for result in results:
 				i+=1
@@ -418,10 +418,12 @@ class SharepointSearch():
 			sys.stdout.flush()
 
 	def printResultsMail(self,i,result):
-		Info(str(i) + ") Mail_Subject -> " + result[1][0] + " -- Link --> " + result[0],print_dt=False)
+		Info(str(i) + ") " + bold(result[1][0]) + " -- Link --> " + result[0],print_dt=False)
 
 	def printResultsSharepoint(self,i,result):
-			Info(str(i) + ") " + result[0],print_dt=False)
+			res=re.sub(".*\/","",result[0])
+			res=re.sub("%20"," ",res)
+			Info(str(i) + ") " + bold(res) + " -- Link -->  " + result[0],print_dt=False)
 
 	def printResultsFindit(self,i,result):
 			Info(str(i) + ") " + result,print_dt=False)
