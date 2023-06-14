@@ -17,8 +17,9 @@ import functools
 
 class Confluence:
 
-	def __init__(self, keywords,regexs=[],appendInCquery="",customCquery=None,getregexs=[],credentialsFile=None,credentialsHead=None):
+	def __init__(self, keywords,regexs=[],appendInCquery="",customCquery=None,getregexs=[],credentialsFile=None,credentialsHead=None,max_results=50):
 
+		self.max_results=max_results
 		defaultsFile = Shared.defaultsFilePath
 		if credentialsHead is None:
 			credentialsHead="Confluence"
@@ -38,10 +39,12 @@ class Confluence:
 				"access_token": self.credentials["token"]   
 			}
 		}
+		#self.confluence = atlassian.Confluence(url=self.credentials["server"],oauth2=oauth2_dict)
 		self.confluence = atlassian.Confluence(url=self.credentials["server"],oauth2=oauth2_dict)
 		self.keywords=keywords
 		self.__get_regexs=getregexs
 		cql_query=self.create_cql(customCquery,appendInCquery)
+		DebugMsg("Search Confluence")
 		results=self.get_results_tp(cql_query)
 #		self.printResults(results)
 		self.get_matching_results_tp(results,regexs)
@@ -113,6 +116,8 @@ class Confluence:
 			keyword=keyword.strip()
 			if re.search("\s",keyword) or re.search("\W",keyword):
 				keywords.append(keyword)
+		if len(self.__get_regexs) + len(regexs) + len(keywords) == 0:
+			return False
 
 		if result['content']['type']=='page':
 			id=result['content']['id']
@@ -167,10 +172,10 @@ class Confluence:
 
 	def get_results_tp(self,cql_query):
 		DebugMsg("Cql_query = " + cql_query)
-		max_results=100
+		
 		max_results_per_iter=20
 		start_ats=[]
-		for i in range(0,int(max_results/max_results_per_iter)):
+		for i in range(0,int(self.max_results/max_results_per_iter)):
 			start_ats.append(max_results_per_iter*i)
 
 		max_threads=10
@@ -186,8 +191,8 @@ class Confluence:
 
 
 		limit_msg=""
-		if len(results) == max_results:
-			limit_msg=" (Max Limit of " + str(max_results) + " results before filtering reached)"
+		if len(results) == self.max_results:
+			limit_msg=" (Max Limit of " + str(self.max_results) + " results before filtering reached)"
 		results=self.filter_relevant_results(results)
 		DebugMsg("Number of results : " + str(len(results)) + limit_msg)
 		return results 
@@ -230,15 +235,15 @@ class Confluence:
 		header=""
 		if len(matched_results)>0 :
 			if len(not_matched_results)>0 and len(matched_results)< 5:
-				header="No Confluence results matched the exact sentence/regex. Showing results from native search"
+				header="Confluence results from the native search query"
 		elif len(results)>0:
 			header="Confluence results from the native search query"
 
-		if len(matched_results)< 5:
+		if len(matched_results)< Shared.matched_to_omit:
 			self.printResults(not_matched_results,header)
 
 		if len(matched_results)>0:
-			header="Confluence results exactly matching the search query"
+			header="Filtered Confluence results exactly matching the search query"
 			self.printResults(matched_results,header)
 
 
