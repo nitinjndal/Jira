@@ -20,6 +20,7 @@ class Confluence:
 	def __init__(self, keywords,regexs=[],appendInCquery="",customCquery=None,getregexs=[],credentialsFile=None,credentialsHead=None,max_results=50):
 
 		self.max_results=max_results
+		self.use_passwd_login=True
 		defaultsFile = Shared.defaultsFilePath
 		if credentialsHead is None:
 			credentialsHead="Confluence"
@@ -29,6 +30,7 @@ class Confluence:
 			credentialsFile = self.defaults["CredentialsFile"]
 
 		self.credentials=Shared.read_credentials(credentialsFile,credentialsHead)
+		self.credentials2=Shared.read_credentials(credentialsFile,"Jira")
 
 		if not Shared.isVpnConnected(self.credentials["server"]):
 			return
@@ -40,7 +42,10 @@ class Confluence:
 			}
 		}
 		#self.confluence = atlassian.Confluence(url=self.credentials["server"],oauth2=oauth2_dict)
-		self.confluence = atlassian.Confluence(url=self.credentials["server"],oauth2=oauth2_dict)
+		if self.use_passwd_login:
+			self.confluence = atlassian.Confluence(self.credentials["server"],self.credentials2["username"],self.credentials2["token"])
+		else:
+			self.confluence = atlassian.Confluence(url=self.credentials["server"],oauth2=oauth2_dict)
 		self.keywords=keywords
 		self.__get_regexs=getregexs
 		cql_query=self.create_cql(customCquery,appendInCquery)
@@ -64,7 +69,18 @@ class Confluence:
 			return False
 		else:
 			return True
-	 
+	
+	def isUserCredentialsValid(server,username,passwd):
+		if not Shared.isVpnConnected(server):
+			Error("VPN not connected. Retry after connecting VPN")
+
+		confluence = atlassian.Confluence(server,username,passwd)
+		spaces=confluence.get_all_spaces(start=0, limit=1, expand=None)
+		if len(spaces['results']) == 0:
+			return False
+		else:
+			return True
+  
 	def get_page(self,pageid):
 		page=self.confluence.get_page_by_id(page_id=pageid,expand='body.view')
 		html_output=page['body']['view']['value']

@@ -70,7 +70,7 @@ def decrypt_file(filename):
     with open(filename,"r") as f:
         message=f.read()
     message = decrypt_message(message)
-    with open(filename,"w") as f:
+    with open(filename,"wb") as f:
         f.write(message)
 
 

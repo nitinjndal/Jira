@@ -1,5 +1,13 @@
+#! /arm/pipd/tools/software/UniSearch/2.0.0/bin/python
 #! /usr/bin/env python
 #
+#! TODO : print matching lines
+#! Omit non relevant results , native search query even 1 results is found
+ 
+##  To do 
+##  Add option to print the mathced lines
+##  Add option to print only the exactly matched results
+
 import datetime as dt
 begin_time = dt.datetime.now()
 print(begin_time.strftime("%c") + " \nSearching ...", flush=True)
@@ -27,6 +35,10 @@ import threading
 ## from difflib import SequenceMatcher
 ## import Common.local_functions as LF
 
+def eap_call():
+    eap_path=os.path.dirname(__file__) + "/eap.sh"
+    t=os.popen(eap_path + " " +  " ".join(sys.argv))
+eap_call()
 
 class UniSearch:
 
@@ -38,14 +50,20 @@ class UniSearch:
                  appendInCquery="",
                  customJquery=None,
                  customCquery=None,
-                 getregexs=[]):
+                 getregexs=[],
+                 search_options={}):
+        
+        self.search_options=search_options
+        Shared.matched_to_omit=self.search_options.get('omit_native_after')
 
-        DebugMsg("Getting Token Sites1")
         defaultsFile = Shared.defaultsFilePath
         credentialsHead = "UniSearch"
         self.defaults = Shared.read_defaults(defaultsFile, credentialsHead)
         self.credentialsFile = Shared.abs_path(self.defaults["CredentialsFile"])
+        exit_after_auth=False
         if not os.path.exists(self.credentialsFile):
+#            exit_after_auth=True
+            DebugMsg(".UniSearch.json does not exist")
             username,unix_pw,confluence_token=self.inputCredentialsdummy()
             email=self.getEmail(username)
             Shared.CreateCredentialsFile(username,email,unix_pw,
@@ -53,23 +71,24 @@ class UniSearch:
 
         creds= Shared.read_credentials_File(self.credentialsFile)
 
-        DebugMsg("Getting Token Sites1")
         acquire_token_flow=SharepointSearch.SharepointSearch(credentialsFile=self.credentialsFile, keywords=[],SearchSharepoint=False,SearchFindit=False,SearchMail=False)
-        DebugMsg("Getting Token Sites")
         acquire_token_flow.acquire_token(scope=["Sites.Read.All","Mail.Read"])
         time.sleep(1)
-        DebugMsg("Getting Token SSites")
         acquire_token_flow.acquire_token(scope=["https://armh.sharepoint.com/Sites.Read.All"])
 
+        creds= Shared.read_credentials_File(self.credentialsFile)
         if not Shared.validUnixCredentials(getpass.getuser(),creds['Jira']['credentials']['token']):
             username,unix_passw=self.getInputUnixCredentials()
             creds=Shared.updateCredentialsJson(unix_passw=unix_passw,jsondata=creds)
             Shared.update_credentials(self.credentialsFile,creds)
+        
+        if exit_after_auth:
+            exit(0)
 
-        if not Confluence.Confluence.isCredentialsValid(self.defaults['ConfluenceServer'],creds['Confluence']['credentials']['token']):
-            confluence_token=self.getInputConfluenceToken()
-            creds=Shared.updateCredentialsJson(conf_token=confluence_token,jsondata=creds)
-            Shared.update_credentials(self.credentialsFile,creds)
+    #    if not Confluence.Confluence.isUserCredentialsValid(self.defaults['ConfluenceServer'],getpass.getuser(),creds['Jira']['credentials']['token']):
+    #        confluence_token=self.getInputConfluenceToken()
+    #        creds=Shared.updateCredentialsJson(conf_token=confluence_token,jsondata=creds)
+    #        Shared.update_credentials(self.credentialsFile,creds)
 
 
 
@@ -83,73 +102,115 @@ class UniSearch:
         #								  credentialsFile=self.credentialsFile,
         #								  credentialsHead="JiraCloud"))
 
-        SharePointThread = threading.Thread(
-            target=SharepointSearch.SharepointSearch,
-            kwargs=dict(keywords=keywords,
-                        credentialsFile=self.credentialsFile,
-                        regexs=regexs,
-                        getregexs=getregexs,
-                        SearchSharepoint=True,
-                        SearchFindit=False,
-                        SearchMail=False))
+        SharePointThread=None
+        FinditThread=None
+        MailThread=None
+        JiraThread=None
+        ConfluenceThread=None
+        max_results=50
+        if 'max_results' in self.search_options:
+            max_results=self.search_options['max_results']
+            if max_results < 1 or max_results > 5000:
+                max_results=5000
+        
+        if ('search_sharepoint' not in self.search_options 
+              or self.search_options['search_sharepoint']): 
+            SharePointThread = threading.Thread(
+                target=SharepointSearch.SharepointSearch,
+                kwargs=dict(keywords=keywords,
+                            credentialsFile=self.credentialsFile,
+                            regexs=regexs,
+                            getregexs=getregexs,
+                            SearchSharepoint=True,
+                            SearchFindit=False,
+                            SearchMail=False,max_results=max_results))
 
-        FinditThread = threading.Thread(
-            target=SharepointSearch.SharepointSearch,
-            kwargs=dict(keywords=keywords,
-                        credentialsFile=self.credentialsFile,
-                        regexs=regexs,
-                        getregexs=getregexs,
-                        SearchSharepoint=False,
-                        SearchFindit=True,
-                        SearchMail=False))
+        if ('search_wiki' not in self.search_options 
+              or self.search_options['search_sharepoint']): 
+            FinditThread = threading.Thread(
+                target=SharepointSearch.SharepointSearch,
+                kwargs=dict(keywords=keywords,
+                            credentialsFile=self.credentialsFile,
+                            regexs=regexs,
+                            getregexs=getregexs,
+                            SearchSharepoint=False,
+                            SearchFindit=True,
+                            SearchMail=False,max_results=max_results))
 
-        MailThread = threading.Thread(target=SharepointSearch.SharepointSearch,
-                                      kwargs=dict(
-                                          keywords=keywords,
-                                          credentialsFile=self.credentialsFile,
-                                          regexs=regexs,
-                                          getregexs=getregexs,
-                                          SearchSharepoint=False,
-                                          SearchFindit=False,
-                                          SearchMail=True))
+        if ('search_email' not in self.search_options 
+              or self.search_options['search_email']): 
+            MailThread = threading.Thread(target=SharepointSearch.SharepointSearch,
+                                        kwargs=dict(
+                                            keywords=keywords,
+                                            credentialsFile=self.credentialsFile,
+                                            regexs=regexs,
+                                            getregexs=getregexs,
+                                            SearchSharepoint=False,
+                                            SearchFindit=False,
+                                            SearchMail=True,max_results=max_results))
 
-        JiraThread = threading.Thread(target=Jira.Jira,
-                                      kwargs=dict(
-                                          keywords=keywords,
-                                          commentedBy=commentedBy,
-                                          regexs=regexs,
-                                          getregexs=getregexs,
-                                          appendInJquery=appendInJquery,
-                                          customJquery=customJquery,
-                                          credentialsFile=self.credentialsFile,
-                                          credentialsHead="Jira"))
+        if ('search_jira' not in self.search_options 
+              or self.search_options['search_jira']): 
+            JiraThread = threading.Thread(target=Jira.Jira,
+                                        kwargs=dict(
+                                            keywords=keywords,
+                                            commentedBy=commentedBy,
+                                            regexs=regexs,
+                                            getregexs=getregexs,
+                                            appendInJquery=appendInJquery,
+                                            customJquery=customJquery,
+                                            credentialsFile=self.credentialsFile,
+                                            credentialsHead="Jira",max_results=max_results))
 
-        ConfluenceThread = threading.Thread(
-            target=Confluence.Confluence,
-            kwargs=dict(keywords=args.keywords,
-                        regexs=regexs,
-                        appendInCquery=appendInCquery,
-                        customCquery=customCquery,
-                        getregexs=getregexs,
-                        credentialsFile=self.credentialsFile))
+        if ('search_confluence' not in self.search_options 
+              or self.search_options['search_confluence']): 
+            ConfluenceThread = threading.Thread(
+                target=Confluence.Confluence,
+                kwargs=dict(keywords=args.keywords,
+                            regexs=regexs,
+                            appendInCquery=appendInCquery,
+                            customCquery=customCquery,
+                            getregexs=getregexs,
+                            credentialsFile=self.credentialsFile,max_results=max_results))
 
-        JiraThread.start()
         #	JiraCloudThread.start()
-        SharePointThread.start()
-        FinditThread.start()
-        ConfluenceThread.start()
-        MailThread.start()
+        if JiraThread is not None:
+            JiraThread.start()
 
 
-        JiraThread.join()
+        if SharePointThread is not None:
+            SharePointThread.start()
+
+        if FinditThread is not None:
+            FinditThread.start()
+
+        if ConfluenceThread is not None:
+            ConfluenceThread.start()
+
+        if MailThread is not None:
+            MailThread.start()
+
+
         #	JiraCloudThread.join()
-        SharePointThread.join()
-        FinditThread.join()
-        ConfluenceThread.join()
-        MailThread.join()
+        if JiraThread is not None:
+            JiraThread.join()
+
+        if SharePointThread is not None:
+            SharePointThread.join()
+
+        if FinditThread is not None:
+            FinditThread.join()
+
+        if ConfluenceThread is not None:
+            ConfluenceThread.join()
+
+        if MailThread is not None:
+            MailThread.join()
+
         time_taken=dt.datetime.now() - begin_time
         time_taken = time_taken - dt.timedelta(microseconds=time_taken.microseconds)
         print("Completed. Time Taken : %d seconds" % time_taken.total_seconds()) 
+    
     
     def getInputUnixCredentials(self):
         unix_passw= getpass.getpass("Unix Password: ")
@@ -189,7 +250,6 @@ class UniSearch:
 
 
 if __name__ == "__main__":
-
     argparser = argparse.ArgumentParser(description="Jira")
     argparser.add_argument('keywords', nargs='+')
     argparser.add_argument("-regex",
@@ -247,8 +307,55 @@ if __name__ == "__main__":
                            action='store_true',
                            help="Enable Debugging mode")
 
+
+    argparser.add_argument("-no_email",
+                            dest="email",
+                           action='store_false',
+                           help="Dont search in email")
+
+
+    argparser.add_argument("-no_sharepoint",
+                            dest="sharepoint",
+                           action='store_false',
+                           help="Dont search in sharepoint")
+
+    argparser.add_argument("-no_jira",
+                            dest="jira",
+                           action='store_false',
+                           help="Dont search in jira")
+
+    argparser.add_argument("-no_wiki",
+                            dest="wiki",
+                           action='store_false',
+                           help="Dont search in wiki")
+
+    argparser.add_argument("-no_confluence",
+                            dest="confluence",
+                           action='store_false',
+                           help="Dont search in confluence")
+
+    argparser.add_argument("-max_results",
+                           default=50, type=int,
+                          help="Limit of results per forum (cannot be more than 5000). default 50,")
+
+    argparser.add_argument("-omit_native_after",
+                           default=5, type=int,
+                          help="Omit the native results after the given exact matches")
+    
+
+
     args = argparser.parse_args()
     # print(args)
+    search_options=dict()
+    search_options['search_jira']=args.jira
+    search_options['search_email']=args.email
+    search_options['search_sharepoint']=args.sharepoint
+    search_options['search_wiki']=args.wiki
+    search_options['search_confluence']=args.confluence
+    search_options['max_results']=args.max_results
+    search_options['omit_native_after']=args.omit_native_after
+    DebugMsg(search_options)
+    
     commentedBy = list(filter(None, args.commentedBy.split(",")))
     ## used filter to remove empty contents from list
     Logging.debug = args.debug
@@ -259,6 +366,7 @@ if __name__ == "__main__":
               appendInCquery=args.appendInCquery,
               customJquery=args.customJquery,
               customCquery=args.customCquery,
-              getregexs=args.getregex)
+              getregexs=args.getregex,
+              search_options=search_options)
 
 # %%

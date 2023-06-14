@@ -58,7 +58,17 @@ class JiraCreateTicket:
 		Info( issue.permalink() + "\t" + issue.fields.summary,print_dt=False)
 		if issue is not None:
 			self.add_watchers(issue.id)
-		#self.add_watchers("PEGASUS-24146")
+		
+  		#issue = jira.issue('PEGASUS-26767')
+  
+		fields_to_update={
+			"customfield_21631" :  {"value" :"NAHPC2"},
+			"customfield_11031" : {"value" : "CAT B"},
+			"labels" : ['Cloud', 'Aether', 'TSMC_CLN03FV41001'] 
+		}
+
+		#issue.update(fields=fields_to_update)
+
 
 	
 
@@ -152,7 +162,8 @@ class JiraCreateTicket:
 			description.append("Getting Following Errors in Log File" )
 			description.append("*Log File Path*")
 			description.append(log_file)
-			description.append(Shared.get_n_lines_after_before("ERROR", log_file,3,line_prefix="{color:#FF0000}",line_suffix="{color}"))
+			description.append(Shared.get_n_lines_after_before("ERROR", log_file,3,line_prefix="{color:#FF0000}",line_suffix="{color}",last_lines=20))
+			description.append(Shared.get_n_lines_after_before("FATAL", log_file,3,line_prefix="{color:#FF0000}",line_suffix="{color}",last_lines=20))
 
 			if re.search("logs\/eosMaster.\d+.log",log_file):
 				grp=re.search("(.*logs\/)(eosMaster)(\.\d+\.)(log)",log_file)
@@ -163,13 +174,13 @@ class JiraCreateTicket:
 				print(aetherlog)
 				if os.path.exists(debuglog):
 					description.append("\n*Errors in EosMaster Debug Log File Path* : " + debuglog)
-					description.append(Shared.get_n_lines_after_before("ERROR", debuglog,3,line_prefix="{color:#FF0000}",line_suffix="{color}"))
+					description.append(Shared.get_n_lines_after_before("ERROR", debuglog,3,line_prefix="{color:#FF0000}",line_suffix="{color}",last_lines=20))
 					description.append("\n*Tail of Master Debug Log File Path* " )
 					description.append(Shared.tail(debuglog,5))
 
 				if os.path.exists(aetherlog):
 					description.append("\n*Errors in Aether Log File Path* : " + aetherlog)
-					description.append(Shared.get_n_lines_after_before("ERROR", aetherlog,3,line_prefix="{color:#FF0000}",line_suffix="{color}"))
+					description.append(Shared.get_n_lines_after_before("ERROR", aetherlog,3,line_prefix="{color:#FF0000}",line_suffix="{color}",last_lines=20))
 					description.append("\n*Tail of Aether Log File Path*")
 					description.append(Shared.tail(aetherlog,10))
 			description.append("#######################################################")
@@ -181,9 +192,6 @@ class JiraCreateTicket:
 
 		return description
 			
-			
-			
-		
 
 	def create_ticket(self, logfile, summary, description):
 		#	summary_value="How to update install/../corner rdb without changing mdbs"
@@ -244,6 +252,10 @@ if __name__ == "__main__":
 	argparser.add_argument("-verbose",
 							 action='store_true',
 							 help="Enable detailed log")
+
+	argparser.add_argument("-project",
+							 default="PEGASUS",
+							 help="JiraProject")
 
 	argparser.add_argument("-debug",
 							 action='store_true',

@@ -89,7 +89,7 @@ def boldr(msg):
 
 class Shared:
 	defaultsFilePath=os.path.dirname(os.path.abspath(__file__)) + "/defaults.json"
-
+	matched_to_omit=5
 
 	def read_credentials_File(filename):
 		filename=os.path.abspath(os.path.expanduser(os.path.expandvars(filename)))
@@ -221,7 +221,7 @@ class Shared:
 		with open(filename) as f:
 			return "\n".join(list(collections.deque(f, n)))
 
-	def get_n_lines_after_before(pattern,filename,n=3,line_prefix="",line_suffix=""):
+	def get_n_lines_after_before(pattern,filename,n=3,line_prefix="",line_suffix="",last_lines=0):
 		lines=[]
 		retval=""
 		start_count=False
@@ -244,6 +244,8 @@ class Shared:
 					lines.append("####################\n\n")
 				if n > 0 :
 					before.append(line)
+		if last_lines>0 and len(lines) > last_lines*n:
+			lines=lines[-1*last_lines*n:]
 		for line in lines:
 			retval=retval + line_prefix+  str(line).strip() + line_suffix + "\n"
 		return retval

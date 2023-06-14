@@ -8,6 +8,7 @@ import argparse
 import json
 import urllib.parse
 import Shared
+import html
 
 
 import datetime as dt
@@ -79,10 +80,10 @@ class AddFaqConfluence:
         paragraph=self.set_paragraph(paragraph,paragraphFile)
         if pageid is None:
             pageid=self.get_pageid(page)
-            if pageid is not None:
-                self.appendInFAQs(heading=heading,paragraph=paragraph,pageid=pageid,operation=operation)
-            else:
-                Error("Page ID is None")
+        if pageid is not None:
+            self.appendInFAQs(heading=heading,paragraph=paragraph,pageid=pageid,operation=operation)
+        else:
+            Error("Page ID is None")
 
 
     #  self.get_matching_results(results,regexs)
@@ -116,7 +117,11 @@ class AddFaqConfluence:
     def appendInFAQs(self,heading,paragraph,pageid,operation):
         print(heading)
         #page_body="<br /><h1>" + self.htmlspecialchars(heading.strip())+ "</h1><p> " +  self.htmlspecialchars(paragraph.strip()) + "</p>"
-        page_body="<br /><h1>" + self.htmlspecialchars(heading.strip())+ "</h1> <p></p>" +  self.htmlspecialchars(paragraph.strip()) + "<p></p>"
+        toc="<ac:structured-macro ac:name=\"toc\"> <ac:parameter ac:name=\"printable\">true</ac:parameter> <ac:parameter ac:name=\"style\">disc</ac:parameter> <ac:parameter ac:name=\"maxLevel\">3</ac:parameter> <ac:parameter ac:name=\"indent\">5px</ac:parameter> <ac:parameter ac:name=\"minLevel\">0</ac:parameter> <ac:parameter ac:name=\"class\">bigpink</ac:parameter> <ac:parameter ac:name=\"type\">list</ac:parameter> <ac:parameter ac:name=\"outline\">false</ac:parameter> <ac:parameter ac:name=\"include\">.*</ac:parameter> </ac:structured-macro>"
+        if operation=="append":
+            toc=""
+        
+        page_body=toc + "<br /><h1>" + self.htmlspecialchars(heading.strip())+ "</h1> <p></p>" +  self.htmlspecialchars(paragraph.strip()) 
         if not Shared.isVpnConnected(self.credentials["server"]):
             return
         page_info=self.confluence.get_page_by_id( pageid, expand=None, status=None, version=None)
@@ -132,7 +137,7 @@ class AddFaqConfluence:
                 if added is not None and 'id' in added:
                     Info("Appended in " + str(page_title) + "  : " + page_url)
             elif operation == "update":
-                added=self.confluence.update_page(pageid, page_title ,page_body, parent_id=parent_id, type='page', representation='storage')
+                added=self.confluence.update_page(pageid, page_title ,page_body, parent_id=parent_id, type='page')
                 if added is not None and 'id' in added:
                     Info("Updated " + str(page_title) + "  : " + page_url)
             else:

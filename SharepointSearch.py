@@ -26,7 +26,8 @@ import functools
 from concurrent.futures import ThreadPoolExecutor
 
 class SharepointSearch():
-	def __init__(self,keywords,credentialsFile=None,SearchSharepoint=True,SearchFindit=True,SearchMail=True,regexs=[],getregexs=[]):
+	def __init__(self,keywords,credentialsFile=None,SearchSharepoint=True,SearchFindit=True,SearchMail=True,regexs=[],getregexs=[],max_results=50):
+		self.max_results=max_results
 		defaultsFile = Shared.defaultsFilePath
 		credentialsHead = "Sharepoint"
 		self.__get_regexs=getregexs
@@ -48,6 +49,7 @@ class SharepointSearch():
 		self.share_point_scopes=self.defaults['Scopes']
 		self.findit_scopes=self.defaults['Findit']['Scopes']
 		if SearchSharepoint:
+			DebugMsg("Search Sharepoint")
 			results=self.get_results_tp(scope=self.share_point_scopes,keywords=keywords,search_func=self.search_sharepoint)
 			self.get_matching_results_tp("Sharepoint", results,regexs,search_regex_func=self.search_regexp_sharepoint,print_results_func=self.printResultsSharepoint)
 		if SearchFindit:
@@ -87,19 +89,21 @@ class SharepointSearch():
 		if os.path.exists(self.tokenCacheFile):
 			js=Shared.read_credentials_File(self.tokenCacheFile)
 			if "token_cache" in js:
+				DebugMsg(f"token cache found ")
 				self.__cache.deserialize(js["token_cache"])
+			else:
+				DebugMsg("token cache not found in credential file")
 		atexit.register(self.updateTokenCache)
 		
 
-	def updateTokenCache(self):
+	def updateTokenCache(self,Force=False):
 		js={}
-
-		if self.__cache.has_state_changed:
+		if self.__cache.has_state_changed or Force:
 			if os.path.exists(self.tokenCacheFile):
 				js=Shared.read_credentials_File(self.tokenCacheFile)
 
 			js["token_cache"]= self.__cache.serialize()
-		
+			DebugMsg("Token Cache updated")
 			Shared.update_credentials(self.tokenCacheFile,js)
 	
 	def acquire_token(self,scope):
@@ -111,18 +115,22 @@ class SharepointSearch():
 
 		self.token_info = None
 		accounts = app.get_accounts()
+		chosen=None
 		if accounts:
-#            print("Pick the account you want to use to proceed:")
+			DebugMsg("Pick the account you want to use to proceed:")
 			if len(accounts)>1:
 				for a in accounts:
 					print(a["username"])
 			# Assuming the end user chose this one
 			chosen = accounts[0]
+			DebugMsg(f"Accounts found {chosen}")
 			# Now let's try to find a token in cache for this account
 			self.token_info  = app.acquire_token_silent(scope, account=chosen)
+		else:
+			DebugMsg("Accounts not found")
 
 		if not self.token_info :
-			DebugMsg("No suitable token exists in cache. Let's get a new one from AAD.")
+			DebugMsg(f"No suitable token exists in cache. Let's get a new one from AAD for scope {scope} and account {chosen}")
 
 			flow = app.initiate_device_flow(scopes=scope)
 			if "user_code" not in flow:
@@ -212,7 +220,7 @@ class SharepointSearch():
 						"driveItem"
 					],
 					"query": {
-						"queryString": keywords + " filetype:docx OR filetype:doc OR filetype:pptx OR filetype:ppt OR filetype:pdf"
+						"queryString": keywords + " filetype:docx OR filetype:doc OR filetype:pptx OR filetype:ppt OR filetype:pdf OR filetype:one"
 					},
 					"sortProperties": [
 						{
@@ -333,10 +341,9 @@ class SharepointSearch():
 			#print("Graph API call result: %s" % json.dumps(graph_data, indent=2))
 
 	def get_results_tp(self,scope, keywords,search_func):
-		max_results=20
-		max_results_per_iter=5
+		max_results_per_iter=10
 		start_ats=[]
-		for i in range(0,int(max_results/max_results_per_iter)):
+		for i in range(0,int(self.max_results/max_results_per_iter)):
 			start_ats.append(max_results_per_iter*i)
 
 		max_threads=10
@@ -357,7 +364,7 @@ class SharepointSearch():
 			results.append([result,results_dic[result]])
 		### results will be a list of lists, where each element has webUrl : download Url
 			
-		DebugMsg("Number of results : " + str(len(results)))
+		DebugMsg("Number of results : " + str(search_func) + str(len(results)))
 		return results
 
 	def __search_regexp_tp(self,regexs,search_regex_func,matched_results,not_matched_results,other_info,result):
@@ -390,15 +397,15 @@ class SharepointSearch():
 
 		if len(matched_results)>0 :
 			if len(not_matched_results)>0 and len(matched_results)< 5:
-				header=source + " results from the native search query"
+				header=source + " Results from the native search query"
 		elif len(results)>0:
-			header="No " + source + " results matched the exact sentence/regex. Showing results from native search"
+			header=source + " Results from the native search query"
 
-		if len(matched_results)< 5:
+		if len(matched_results)< Shared.matched_to_omit:
 			self.printResults(not_matched_results,header,print_results_func)
 		
 		if len(matched_results)>0:
-			header=source +  " results exactly matching the search query"
+			header="Filtered " + source +  " results exactly matching the search query"
 			self.printResults(matched_results,header,print_results_func)
 
 
@@ -445,7 +452,7 @@ class SharepointSearch():
 			if re.search("\s",keyword) or re.search("\W",keyword):
 				keywords.append(keyword)
 
-		found=True
+		found=False
 		DebugMsg("Finding Regexes in Mail")
 		if len(self.__get_regexs + regexs + keywords )> 0:
 			found=False
@@ -483,7 +490,7 @@ class SharepointSearch():
 			if re.search("\s",keyword) or re.search("\W",keyword):
 				keywords.append(keyword)
 
-		found=True
+		found=False
 		DebugMsg("Finding Regexes %s" % str(regexs))
 		if len(self.__get_regexs + regexs + keywords )> 0:
 			found=False

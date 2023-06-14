@@ -27,7 +27,8 @@ from concurrent.futures import ThreadPoolExecutor
 
 class Jira:
 
-	def __init__(self, keywords,regexs=[],commentedBy=[],appendInJquery="",customJquery=None,getregexs=[],credentialsFile=None,credentialsHead=None):
+	def __init__(self, keywords,regexs=[],commentedBy=[],appendInJquery="",customJquery=None,getregexs=[],credentialsFile=None,credentialsHead=None,max_results=50):
+		self.max_results=max_results
 
 		defaultsFile = Shared.defaultsFilePath
 
@@ -51,12 +52,17 @@ class Jira:
 		self.__get_regexs=getregexs
 		DebugMsg("commentedBy=",commentedBy)
 		jql_query=self.create_jql(customJquery,appendInJquery)
+		DebugMsg("Search Jira")
 		issues=self.get_issues_tp(jql_query)
 		self.get_matching_issues_tp(issues,regexs)
 
 
 	def create_jql(self,customJquery=None, appendInJquery=""):
 		# keywords=["abc", "def"]
+		projects = self.jira.projects()
+		allowed_projects=[]
+		for project in projects:
+			allowed_projects.append(project.key)
 		i=0
 		jql_query=""
 		if customJquery is not None and re.match(".*\S.*",customJquery):
@@ -78,10 +84,11 @@ class Jira:
 			i=0
 			jql_query+= "project in (" 
 			for project in self.defaults['projects']:
-				if i > 0:
-					jql_query+= ","
-				i+=1
-				jql_query+= project
+				if project in allowed_projects:
+					if i > 0:
+						jql_query+= ","
+					i+=1
+					jql_query+= project
 			jql_query+= "))"
 
 			jql_query += appendInJquery
@@ -98,7 +105,7 @@ class Jira:
 			if re.search("\s",keyword) or re.search("\W",keyword):
 				keywords.append(keyword)
 
-		found=True
+		found=False
 		if len(self.__get_regexs + regexs + keywords )> 0:
 			found=False
 			comments=self.jira.comments(issue)
@@ -146,10 +153,9 @@ class Jira:
 
 	def get_issues_tp(self,jql_query):
 		DebugMsg("Jql_query = " + jql_query)
-		max_results=50
 		max_results_per_iter=20
 		start_ats=[]
-		for i in range(0,int(max_results/max_results_per_iter)):
+		for i in range(0,int(self.max_results/max_results_per_iter)):
 			start_ats.append(max_results_per_iter*i)
 
 		max_threads=10
@@ -164,7 +170,7 @@ class Jira:
 			issues=issues + issues_iter
 
 		limit_msg=""
-		if len(issues) == max_results:
+		if len(issues) == self.max_results:
 			limit_msg=" (Max Limit reached)"
 		DebugMsg("Number of issues : " + str(len(issues)) + limit_msg)
 		return issues
@@ -291,16 +297,16 @@ class Jira:
 	def __printIssues(self,issues,matched_issues,not_matched_issues):
 		header=""
 		if len(matched_issues)>0 :
-			if len(not_matched_issues)>0 and len(matched_issues)< 5:
-				header="No Jira results matched the exact sentence/regex. Showing results from native search"
+			if len(not_matched_issues)>0 and len(matched_issues)<  Shared.matched_to_omit:
+				header="Jira results from the native search query"
 		elif len(issues)>0:
 			header="Jira results from the native search query"
 
-		if len(matched_issues)< 5:
+		if len(matched_issues)< Shared.matched_to_omit:
 			self.printIssues(not_matched_issues,header)
 
 		if len(matched_issues)>0:
-			header="Jira results exactly matching the search query"
+			header="Filtered Jira results exactly matching the search query"
 			self.printIssues(matched_issues,header)
 
 
