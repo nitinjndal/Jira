@@ -106,6 +106,7 @@ class UniSearch:
         FinditThread=None
         MailThread=None
         JiraThread=None
+        TeamsThread=None
         ConfluenceThread=None
         max_results=50
         if 'max_results' in self.search_options:
@@ -113,6 +114,20 @@ class UniSearch:
             if max_results < 1 or max_results > 5000:
                 max_results=5000
         
+        if ('search_teams' not in self.search_options 
+              or self.search_options['search_teams']): 
+            TeamsThread = threading.Thread(
+                target=SharepointSearch.SharepointSearch,
+                kwargs=dict(keywords=keywords,
+                            credentialsFile=self.credentialsFile,
+                            regexs=regexs,
+                            getregexs=getregexs,
+                            SearchSharepoint=False,
+                            SearchFindit=False,
+                            SearchMail=False,
+                            SearchTeams=True,
+                            max_results=max_results))
+            
         if ('search_sharepoint' not in self.search_options 
               or self.search_options['search_sharepoint']): 
             SharePointThread = threading.Thread(
@@ -123,6 +138,7 @@ class UniSearch:
                             getregexs=getregexs,
                             SearchSharepoint=True,
                             SearchFindit=False,
+                            SearchTeams=False,
                             SearchMail=False,max_results=max_results))
 
         if ('search_wiki' not in self.search_options 
@@ -135,6 +151,7 @@ class UniSearch:
                             getregexs=getregexs,
                             SearchSharepoint=False,
                             SearchFindit=True,
+                            SearchTeams=False,
                             SearchMail=False,max_results=max_results))
 
         if ('search_email' not in self.search_options 
@@ -147,6 +164,7 @@ class UniSearch:
                                             getregexs=getregexs,
                                             SearchSharepoint=False,
                                             SearchFindit=False,
+                                            SearchTeams=False,
                                             SearchMail=True,max_results=max_results))
 
         if ('search_jira' not in self.search_options 
@@ -190,6 +208,9 @@ class UniSearch:
         if MailThread is not None:
             MailThread.start()
 
+        if TeamsThread is not None:
+            TeamsThread.start()
+
 
         #	JiraCloudThread.join()
         if JiraThread is not None:
@@ -207,6 +228,9 @@ class UniSearch:
         if MailThread is not None:
             MailThread.join()
 
+        if TeamsThread is not None:
+            TeamsThread.join()
+            
         time_taken=dt.datetime.now() - begin_time
         time_taken = time_taken - dt.timedelta(microseconds=time_taken.microseconds)
         print("Completed. Time Taken : %d seconds" % time_taken.total_seconds()) 
@@ -334,6 +358,11 @@ if __name__ == "__main__":
                            action='store_false',
                            help="Dont search in confluence")
 
+    argparser.add_argument("-no_teams",
+                            dest="teams",
+                           action='store_false',
+                           help="Dont search in confluence")
+    
     argparser.add_argument("-max_results",
                            default=50, type=int,
                           help="Limit of results per forum (cannot be more than 5000). default 50,")
@@ -348,6 +377,7 @@ if __name__ == "__main__":
     # print(args)
     search_options=dict()
     search_options['search_jira']=args.jira
+    search_options['search_teams']=args.teams
     search_options['search_email']=args.email
     search_options['search_sharepoint']=args.sharepoint
     search_options['search_wiki']=args.wiki

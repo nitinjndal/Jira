@@ -26,7 +26,9 @@ import functools
 from concurrent.futures import ThreadPoolExecutor
 
 class SharepointSearch():
-	def __init__(self,keywords,credentialsFile=None,SearchSharepoint=True,SearchFindit=True,SearchMail=True,regexs=[],getregexs=[],max_results=50):
+	def __init__(self,keywords,credentialsFile=None,
+              SearchSharepoint=True, SearchFindit=True,SearchMail=True, SearchTeams=True,
+              regexs=[],getregexs=[],max_results=50):
 		self.max_results=max_results
 		defaultsFile = Shared.defaultsFilePath
 		credentialsHead = "Sharepoint"
@@ -62,6 +64,13 @@ class SharepointSearch():
 #			self.search_mail(scope=["Sites.Read.All"], keywords=keywords)
 			results=self.get_results_tp(scope=self.share_point_scopes,keywords=keywords,search_func=self.search_mail)
 			self.get_matching_results_tp("Email", results,regexs,search_regex_func=self.search_regexp_mail,print_results_func=self.printResultsMail)
+
+		if SearchTeams:
+			DebugMsg("Search Teams")
+#			self.search_mail(scope=["Sites.Read.All"], keywords=keywords)
+			results=self.get_results_tp(scope=self.share_point_scopes,keywords=keywords,search_func=self.search_chat)
+			self.get_matching_results_tp("Chat", results,regexs,search_regex_func=self.search_regexp_mail,print_results_func=self.printResultsTeams)
+	
 	
 	
 	def combine_keywords(self,keywords):
@@ -73,10 +82,9 @@ class SharepointSearch():
 	
 	def define_configs(self):
 		self.config={
-
-								"authority": "https://login.microsoftonline.com/" + self.credentials['tenant_id']  ,
-								"client_id": self.credentials['client_id'],
-								}
+				"authority": "https://login.microsoftonline.com/" + self.credentials['tenant_id']  ,
+				"client_id": self.credentials['client_id'],
+				}
 
 		self.config["endpoints"]={
 			"sharepoint": self.defaults['EndPoint'],
@@ -197,6 +205,62 @@ class SharepointSearch():
 					#weburl=weburl.replace("&viewmodel=ReadMessageItem","")
 
 					subject=x['resource']['subject']
+					if weburl in results or subject in subjects: 
+						DebugMsg("URL %s already exists, not added" % weburl)
+					else:
+						id=x['hitId']
+						url='https://graph.microsoft.com/v1.0/me/messages/' + id + '/$value'
+						results[weburl]=[subject,url]
+						subjects.add(subject)
+		return results
+         
+
+	def search_chat(self,scope,keywords,max_results_per_iter=10,start_at=0):
+		self.acquire_token(self.share_point_scopes)   ##  this will update the token info
+		headers={'Authorization': 'Bearer ' + self.token_info['access_token'],
+		"Content-Type" : "application/json"
+		}
+
+		params=None
+		data={
+			"requests": [
+				{
+					"entityTypes": [
+						"chatMessage"
+					],
+					"query": {
+						"queryString": keywords 
+					},
+					"from": start_at,
+					"size": max_results_per_iter
+				}
+			]
+		}
+					#"fields" : ["parentReference","webUrl"],
+		graph_data = requests.post(
+			self.config["endpoints"]["sharepoint"],
+			headers=headers,
+			params=params,
+			data=json.dumps(data)
+		)
+			#data=json.dumps(data)
+		content=json.loads(graph_data.content)
+		#pprint.pprint(content)
+		results={}
+		subjects=set()
+		
+		if 'value' in content:
+			if 'hits' in content['value'][0]['hitsContainers'][0]: 
+				for x in content['value'][0]['hitsContainers'][0]['hits']:
+					weburl=re.sub(" ","%20",x['resource']['webLink'])
+					requests.get(weburl,headers=headers)
+					#weburl=weburl.replace("&viewmodel=ReadMessageItem","")
+					subject=''
+					if 'subject' in x['resource']:
+						subject=x['resource']['subject']
+					subject=subject + "\n"+  x['summary']
+					subject=re.sub(r'\n\s*\n+', '\n\n', subject)
+					subject=re.sub(r'\n', '\n\t', subject)
 					if weburl in results or subject in subjects: 
 						DebugMsg("URL %s already exists, not added" % weburl)
 					else:
@@ -426,6 +490,9 @@ class SharepointSearch():
 
 	def printResultsMail(self,i,result):
 		Info(str(i) + ") " + bold(result[1][0]) + " -- Link --> " + result[0],print_dt=False)
+
+	def printResultsTeams(self,i,result):
+		Info(str(i) + ") " + bold(result[1][0]) + "\n\t " + result[0],print_dt=False)
 
 	def printResultsSharepoint(self,i,result):
 			res=re.sub(".*\/","",result[0])
