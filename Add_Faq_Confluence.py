@@ -1,3 +1,4 @@
+#! /projects/pipd/sw/work/nitjin01/Python/Dev/VirtualEnv/UniSearch/bin/python
 #! /usr/bin/env python
 #
 # %%
@@ -52,131 +53,142 @@ from Shared import Logging,DebugMsg,Info,Error,Shared
 # %%
 class AddFaqConfluence:
 
-    def __init__(self, heading,paragraph=None,paragraphFile=None,credentialsFile=None,credentialsHead=None,page="MemFAQ",pageid=None,operation="append"):
+	def __init__(self, heading,paragraph=None,paragraphFile=None,credentialsFile=None,credentialsHead=None,page="MemFAQ",pageid=None,operation="append"):
 
-        DebugMsg("Operation",operation)
-        defaultsFile = Shared.defaultsFilePath
-        if credentialsHead is None:
-            credentialsHead="Confluence"
+		DebugMsg("Operation",operation)
+		self.use_passwd_login=True
+		defaultsFile = Shared.defaultsFilePath
+		if credentialsHead is None:
+			credentialsHead="Confluence"
 
-        self.defaults=Shared.read_defaults(defaultsFile,credentialsHead)
-        if credentialsFile is None:
-            credentialsFile = self.defaults["CredentialsFile"]
+		self.defaults=Shared.read_defaults(defaultsFile,credentialsHead)
+		if credentialsFile is None:
+			credentialsFile = self.defaults["CredentialsFile"]
 
-        self.credentials=Shared.read_credentials(credentialsFile,credentialsHead)
+		self.credentials=Shared.read_credentials(credentialsFile,credentialsHead)
+		self.credentials2=Shared.read_credentials(credentialsFile,"Jira")
 
-        if not Shared.isVpnConnected(self.credentials["server"]):
-            return
-
-
-        oauth2_dict = {
-         "client_id": None,
-         "token": {
-          "access_token": self.credentials["token"]
-         }
-        }
-        self.confluence = atlassian.Confluence(url=self.credentials["server"],oauth2=oauth2_dict)
-
-        paragraph=self.set_paragraph(paragraph,paragraphFile)
-        if pageid is None:
-            pageid=self.get_pageid(page)
-        if pageid is not None:
-            self.appendInFAQs(heading=heading,paragraph=paragraph,pageid=pageid,operation=operation)
-        else:
-            Error("Page ID is None")
+		if not Shared.isVpnConnected(self.credentials["server"]):
+			return
 
 
-    #  self.get_matching_results(results,regexs)
+		oauth2_dict = {
+		 "client_id": None,
+		 "token": {
+		  "access_token": self.credentials["token"]
+		 }
+		}
+		if self.use_passwd_login:
+			self.confluence = atlassian.Confluence(self.credentials["server"],self.credentials2["username"],self.credentials2["token"])
+		else:
+			self.confluence = atlassian.Confluence(url=self.credentials["server"],oauth2=oauth2_dict)
+
+		paragraph=self.set_paragraph(paragraph,paragraphFile)
+		if pageid is None:
+			pageid=self.get_pageid(page)
+		if pageid is not None:
+			self.appendInFAQs(heading=heading,paragraph=paragraph,pageid=pageid,operation=operation)
+		else:
+			Error("Page ID is None")
 
 
-    def set_paragraph(self,paragraph,paragraphFile):
-        if paragraph is None:
-            if paragraphFile is not None:
-                with open(paragraphFile) as f:
-                    paragraph=f.read()
-                    paragraph=str.replace(paragraph,"\n","\r\n")
-            else:
-                print("Paragraph or pragrapfFile should be given")
-                exit()
-
-        ## if not a html input, add paragraph tags
-        if (paragraph is not None) and (re.search("<.*>.*<.*>", paragraph) is None):
-            paragraph="<p>" + paragraph + "</p>"
-        return paragraph
-
-    def get_pageid(self,page):
-        print(self.defaults)
-        if page.lower() in self.defaults["pageId"]:
-            return self.defaults["pageId"][page.lower()]
-        else:
-            Error("Page " + page + " not Found")
-            exit()
+	#  self.get_matching_results(results,regexs)
 
 
+	def set_paragraph(self,paragraph,paragraphFile):
+		if paragraph is None:
+			if paragraphFile is not None:
+				with open(paragraphFile) as f:
+					paragraph=f.read()
+					paragraph=str.replace(paragraph,"\n","\r\n")
+			else:
+				print("Paragraph or pragrapfFile should be given")
+				exit()
 
-    def appendInFAQs(self,heading,paragraph,pageid,operation):
-        print(heading)
-        #page_body="<br /><h1>" + self.htmlspecialchars(heading.strip())+ "</h1><p> " +  self.htmlspecialchars(paragraph.strip()) + "</p>"
-        toc="<ac:structured-macro ac:name=\"toc\"> <ac:parameter ac:name=\"printable\">true</ac:parameter> <ac:parameter ac:name=\"style\">disc</ac:parameter> <ac:parameter ac:name=\"maxLevel\">3</ac:parameter> <ac:parameter ac:name=\"indent\">5px</ac:parameter> <ac:parameter ac:name=\"minLevel\">0</ac:parameter> <ac:parameter ac:name=\"class\">bigpink</ac:parameter> <ac:parameter ac:name=\"type\">list</ac:parameter> <ac:parameter ac:name=\"outline\">false</ac:parameter> <ac:parameter ac:name=\"include\">.*</ac:parameter> </ac:structured-macro>"
-        if operation=="append":
-            toc=""
-        
-        page_body=toc + "<br /><h1>" + self.htmlspecialchars(heading.strip())+ "</h1> <p></p>" +  self.htmlspecialchars(paragraph.strip()) 
-        if not Shared.isVpnConnected(self.credentials["server"]):
-            return
-        page_info=self.confluence.get_page_by_id( pageid, expand=None, status=None, version=None)
-        page_url=self.credentials["server"] + page_info['space']['_links']['webui']  + "/" + urllib.parse.quote_plus( page_info['title'] )
-        page_url=self.defaults["url_view_pageid"] + str(pageid)
-        page_title=page_info['title']
-        ancestors=self.confluence.get_page_ancestors(pageid)
-        added=None
-        if len(ancestors)> 0:
-            parent_id=ancestors[-1]['id']
-            if operation=="append":
-                added=self.confluence.append_page(pageid, page_title ,page_body, parent_id=parent_id, type='page', representation='storage', minor_edit=False)
-                if added is not None and 'id' in added:
-                    Info("Appended in " + str(page_title) + "  : " + page_url)
-            elif operation == "update":
-                added=self.confluence.update_page(pageid, page_title ,page_body, parent_id=parent_id, type='page')
-                if added is not None and 'id' in added:
-                    Info("Updated " + str(page_title) + "  : " + page_url)
-            else:
-                Error("Invalid Operation.")
-        return added
+		## if not a html input, add paragraph tags
+		if (paragraph is not None) and (re.search("<.*>.*<.*>", paragraph) is None):
+			#paragraph="<p>" + paragraph + "</p>"
+			pass
+		return paragraph
 
-    def htmlspecialchars(self,text):
-        return (
-         text.replace("&", "&amp;").
-         replace('"', "&quot;").
-         #replace("<", "&lt;").
-         #replace(">", "&gt;").
-         replace("\n","<br />")
-        )
+	def get_pageid(self,page):
+		print(self.defaults)
+		if page.lower() in self.defaults["pageId"]:
+			return self.defaults["pageId"][page.lower()]
+		else:
+			Error("Page " + page + " not Found")
+			exit()
 
+
+
+	def appendInFAQs(self,heading,paragraph,pageid,operation):
+		print(heading)
+		#page_body="<br /><h1>" + self.htmlspecialchars(heading.strip())+ "</h1><p> " +  self.htmlspecialchars(paragraph.strip()) + "</p>"
+		toc="<ac:structured-macro ac:name=\"toc\"> <ac:parameter ac:name=\"printable\">true</ac:parameter> <ac:parameter ac:name=\"style\">disc</ac:parameter> <ac:parameter ac:name=\"maxLevel\">3</ac:parameter> <ac:parameter ac:name=\"indent\">5px</ac:parameter> <ac:parameter ac:name=\"minLevel\">0</ac:parameter> <ac:parameter ac:name=\"class\">bigpink</ac:parameter> <ac:parameter ac:name=\"type\">list</ac:parameter> <ac:parameter ac:name=\"outline\">false</ac:parameter> <ac:parameter ac:name=\"include\">.*</ac:parameter> </ac:structured-macro>"
+		if operation=="append":
+			toc=""
+		
+		page_body=toc + "<br /><h1>" + html.escape(self.htmlspecialchars(heading.strip()))+ "</h1>" +  html.escape(self.htmlspecialchars(paragraph.strip()))
+		page_body=page_body.replace("__LINEBREAK__","<br />")
+		if not Shared.isVpnConnected(self.credentials["server"]):
+			return
+		page_info=self.confluence.get_page_by_id( pageid, expand=None, status=None, version=None)
+		page_url=self.credentials["server"] + page_info['space']['_links']['webui']  + "/" + urllib.parse.quote_plus( page_info['title'] )
+		page_url=self.defaults["url_view_pageid"] + str(pageid)
+		page_title=page_info['title']
+		ancestors=self.confluence.get_page_ancestors(pageid)
+		added=None
+		if len(ancestors)> 0:
+			parent_id=ancestors[-1]['id']
+			if operation=="append":
+				DebugMsg(f"PagId={pageid} Page_title={page_title} parent_id={parent_id}")
+				added=self.confluence.append_page(pageid, page_title ,page_body, parent_id=parent_id, type='page', representation='storage', minor_edit=False)
+				if added is not None and 'id' in added:
+					Info("Appended in " + str(page_title) + "  : " + page_url)
+			elif operation == "update":
+				added=self.confluence.update_page(pageid, page_title ,page_body, parent_id=parent_id, type='page')
+				if added is not None and 'id' in added:
+					Info("Updated " + str(page_title) + "  : " + page_url)
+			else:
+				Error("Invalid Operation.")
+		return added
+
+	def htmlspecialchars2(self,text):
+		return (
+		 text.replace("&", "&amp;").
+		 replace('"', "&quot;").
+		 replace("<", "&lt;").
+		 replace(">", "&gt;").
+		 text.replace("\n","<br />")
+		)
+	def htmlspecialchars(self,text):
+		return ( text.replace("\n","__LINEBREAK__"))
 
 
 if __name__ == "__main__":
 
-    argparser = argparse.ArgumentParser(description="Confluence Search")
-    argparser.add_argument('-heading',required=True)
-    argparser.add_argument('-paragraph',required=False)
-    argparser.add_argument('-paragraphFile',required=False)
-    argparser.add_argument('-page',required=False,default="MemFaq",metavar="MemFAQ", help="MemFAQ/AetherFAQ")
-    argparser.add_argument('-pageid',required=False,default=None,metavar="924952128", help="MemFAQ/AetherFAQ")
-    argparser.add_argument('-recreate',action='store_true',help="Delete existing contents and recreate page")
+	argparser = argparse.ArgumentParser(description="Confluence Search")
+	argparser.add_argument('-heading',required=True)
+	argparser.add_argument('-paragraph',required=False)
+	argparser.add_argument('-paragraphFile',required=False)
+	argparser.add_argument('-page',required=False,default="MemFaq",metavar="MemFAQ", help="MemFAQ/AetherFAQ")
+	argparser.add_argument('-pageid',required=False,default=None,metavar="924952128", help="MemFAQ/AetherFAQ")
+	argparser.add_argument('-recreate',action='store_true',help="Delete existing contents and recreate page")
 
-    argparser.add_argument(
-     "-verbose", action='store_true', help="Enable detailed log")
+	argparser.add_argument(
+	 "-verbose", action='store_true', help="Enable detailed log")
 
-    argparser.add_argument(
-     "-debug", action='store_true', help="Enable Debugging mode")
-
-
-    args = argparser.parse_args()
-    print(args)
-    operation="append"
-    if args.recreate:
-        operation="update"
+	argparser.add_argument(
+	 "-debug", action='store_true', help="Enable Debugging mode")
 
 
-    AddFaqConfluence(heading=args.heading,paragraph=args.paragraph,paragraphFile=args.paragraphFile,page=args.page,pageid=args.pageid ,credentialsFile="~/.UniSearch.json",operation=operation)
+	args = argparser.parse_args()
+	print(args)
+	operation="append"
+	if args.recreate:
+		operation="update"
+	if args.debug:
+		Logging.debug=True
+
+
+	AddFaqConfluence(heading=args.heading,paragraph=args.paragraph,paragraphFile=args.paragraphFile,page=args.page,pageid=args.pageid ,credentialsFile="~/.UniSearch.json",operation=operation)
