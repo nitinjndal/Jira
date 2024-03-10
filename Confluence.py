@@ -17,7 +17,7 @@ import functools
 
 class Confluence:
 
-	def __init__(self, keywords,regexs=[],appendInCquery="",customCquery=None,getregexs=[],credentialsFile=None,credentialsHead=None,max_results=50):
+	def __init__(self, keywords,regexs=[],appendInCquery="",customCquery=None,getregexs=[],creds=None,credentialsFile=None,credentialsHead=None,max_results=50):
 
 		self.max_results=max_results
 		self.use_passwd_login=True
@@ -29,8 +29,13 @@ class Confluence:
 		if credentialsFile is None:
 			credentialsFile = self.defaults["CredentialsFile"]
 
-		self.credentials=Shared.read_credentials(credentialsFile,credentialsHead)
-		self.credentials2=Shared.read_credentials(credentialsFile,"Jira")
+		if creds is None:
+			self.credentials=Shared.read_credentials(credentialsFile,credentialsHead)
+			self.credentials2=Shared.read_credentials(credentialsFile,"Jira")
+		else:
+			self.credentials=creds
+			self.credentials2=creds
+
 
 		if not Shared.isVpnConnected(self.credentials["server"]):
 			return
@@ -48,11 +53,15 @@ class Confluence:
 			self.confluence = atlassian.Confluence(url=self.credentials["server"],oauth2=oauth2_dict)
 		self.keywords=keywords
 		self.__get_regexs=getregexs
-		cql_query=self.create_cql(customCquery,appendInCquery)
+		self.cql_query=self.create_cql(customCquery,appendInCquery)
+		self.regexs=regexs
+		self.combined_results={}
+		results=self.get_results_tp(self.cql_query)
+		self.get_matching_results_tp(results,self.regexs)
+
+	def get_results(self):
 		DebugMsg("Search Confluence")
-		results=self.get_results_tp(cql_query)
-#		self.printResults(results)
-		self.get_matching_results_tp(results,regexs)
+		return self.combined_results
 
 	def isCredentialsValid(server,token):
 		if not Shared.isVpnConnected(server):
@@ -246,6 +255,18 @@ class Confluence:
 
 
 		self.__printResults(results,matched_results,not_matched_results)
+		self.update_results_json("Confluence",matched_results,"Matched")
+		self.update_results_json("Confluence", not_matched_results,"NotMatched")
+
+	def update_results_json(self,source,results,subcategory):
+		if source not in self.combined_results:
+			self.combined_results[source]={}
+		
+		if subcategory not in self.combined_results[source]:
+			self.combined_results[source][subcategory]=[]
+
+		for result in results:
+			self.combined_results[source][subcategory].append({ "Subject" : result['content']['title'], 'Summary' : "" , 'Link' : self.credentials["server"] + result['url']})
 
 	def __printResults(self,results,matched_results,not_matched_results):
 		header=""

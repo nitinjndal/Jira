@@ -28,7 +28,7 @@ from concurrent.futures import ThreadPoolExecutor
 class SharepointSearch():
 	def __init__(self,keywords,credentialsFile=None,
               SearchSharepoint=True, SearchFindit=True,SearchMail=True, SearchTeams=True,
-              regexs=[],getregexs=[],max_results=50):
+              regexs=[],getregexs=[],max_results=50,token=None):
 		self.max_results=max_results
 		defaultsFile = Shared.defaultsFilePath
 		credentialsHead = "Sharepoint"
@@ -37,15 +37,30 @@ class SharepointSearch():
 #		SearchSharepoint=False
 #		SearchFindit=False
 #		SearchMail=False
+#		SearchTeams=False
+		self.token=token
+		self.combined_results={}
+
 
 		self.defaults=Shared.read_defaults(defaultsFile,credentialsHead)
-		if credentialsFile is None:
-			credentialsFile = self.defaults["CredentialsFile"]
-		self.tokenCacheFile=Shared.abs_path(credentialsFile)
 
-		self.credentials=Shared.read_credentials(credentialsFile,credentialsHead)
-		self.define_configs()
-		self.setTokenCache()
+		self.config={}
+		self.config["endpoints"]={
+			"sharepoint": self.defaults['EndPoint'],
+			"findit" : self.defaults['Findit']['EndPoint']
+		}
+		self.token_info={}
+		if self.token is not None:
+			self.token_info['access_token']=self.token
+		else:	
+			if credentialsFile is None:
+				credentialsFile = self.defaults["CredentialsFile"]
+			self.tokenCacheFile=Shared.abs_path(credentialsFile)
+			self.credentials=Shared.read_credentials(credentialsFile,credentialsHead)
+			self.config["authority"]= "https://login.microsoftonline.com/" + self.credentials['tenant_id']  
+			self.config["client_id"]= self.credentials['client_id']
+			self.setTokenCache()
+		
 		self.keywords=keywords
 		keywords=self.combine_keywords(keywords)
 		self.share_point_scopes=self.defaults['Scopes']
@@ -54,11 +69,18 @@ class SharepointSearch():
 			DebugMsg("Search Sharepoint")
 			results=self.get_results_tp(scope=self.share_point_scopes,keywords=keywords,search_func=self.search_sharepoint)
 			self.get_matching_results_tp("Sharepoint", results,regexs,search_regex_func=self.search_regexp_sharepoint,print_results_func=self.printResultsSharepoint)
+
 		if SearchFindit:
 			DebugMsg("Search findit")
 			results=self.search_findit(scope=self.findit_scopes, keywords=keywords)
 			header="Wiki results matching the search query"
 			self.printResults(results,header,print_results_func=self.printResultsFindit)
+			self.combined_results["Wiki"]={}
+			self.combined_results["Wiki"]['Matched']=[]
+			self.combined_results["Wiki"]['Unmatched']=[]
+			for result in results:
+				self.combined_results["Wiki"]['Matched'].append({ "Subject" : result, 'Summary' : '' , 'Link' : result})
+
 		if SearchMail:
 			DebugMsg("Search Mail")
 #			self.search_mail(scope=["Sites.Read.All"], keywords=keywords)
@@ -69,7 +91,13 @@ class SharepointSearch():
 			DebugMsg("Search Teams")
 #			self.search_mail(scope=["Sites.Read.All"], keywords=keywords)
 			results=self.get_results_tp(scope=self.share_point_scopes,keywords=keywords,search_func=self.search_chat)
-			self.get_matching_results_tp("Chat", results,regexs,search_regex_func=self.search_regexp_mail,print_results_func=self.printResultsTeams)
+			self.get_matching_results_tp("Chat", results,regexs,search_regex_func=self.search_regexp_teams,print_results_func=self.printResultsTeams)
+	
+ 
+	def get_results(self):
+		print(self.combined_results)
+		return self.combined_results
+
 	
 	
 	
@@ -80,16 +108,6 @@ class SharepointSearch():
 		return " ".join(tmp)
 
 	
-	def define_configs(self):
-		self.config={
-				"authority": "https://login.microsoftonline.com/" + self.credentials['tenant_id']  ,
-				"client_id": self.credentials['client_id'],
-				}
-
-		self.config["endpoints"]={
-			"sharepoint": self.defaults['EndPoint'],
-			"findit" : self.defaults['Findit']['EndPoint']
-		}
 
 
 	def setTokenCache(self):
@@ -115,6 +133,8 @@ class SharepointSearch():
 			Shared.update_credentials(self.tokenCacheFile,js)
 	
 	def acquire_token(self,scope):
+		if 'access_token' in self.token_info and self.token_info['access_token'] is not None:
+			return
 		app = msal.PublicClientApplication(
 						self.config["client_id"], authority=self.config["authority"],
 
@@ -220,6 +240,9 @@ class SharepointSearch():
 		headers={'Authorization': 'Bearer ' + self.token_info['access_token'],
 		"Content-Type" : "application/json"
 		}
+#		print("###")
+	#	print(self.token_info['access_token'])
+	#	print("###")
 
 		params=None
 		data={
@@ -248,7 +271,7 @@ class SharepointSearch():
 		#pprint.pprint(content)
 		results={}
 		subjects=set()
-		
+		DebugMsg(f"Seaching in chat {keywords}")	
 		if 'value' in content:
 			if 'hits' in content['value'][0]['hitsContainers'][0]: 
 				for x in content['value'][0]['hitsContainers'][0]['hits']:
@@ -454,6 +477,21 @@ class SharepointSearch():
 									{'thread':'??'})
 			exe.map(fp,results)
 		self.__printresults(source,results,matched_results,not_matched_results,print_results_func)
+		self.update_results_json(source,matched_results,"Matched")
+		self.update_results_json(source,not_matched_results,"NotMatched")
+
+
+	def update_results_json(self,source,results,subcategory):
+		if source not in self.combined_results:
+			self.combined_results[source]={}
+		if subcategory not in  self.combined_results[source]:
+			self.combined_results[source][subcategory]=[]
+		for result in results:
+			if source == "Sharepoint":
+				self.combined_results[source][subcategory].append({ "Subject" : self.get_sharepoint_display(result[0]), 'Summary' : "", 'Link' : result[0]})
+			elif (source == "Email") or (source == "Chat"):
+				self.combined_results[source][subcategory].append({ "Subject" : result[1][0], 'Summary' : "" , 'Link' : result[0]})
+			
 
 	def __printresults(self,source,results,matched_results,not_matched_results,print_results_func):
 		DebugMsg("print_results len_matched_results=%d len_unmatched_results=%d" % (len(matched_results),len(not_matched_results)))
@@ -492,15 +530,65 @@ class SharepointSearch():
 		Info(str(i) + ") " + bold(result[1][0]) + " -- Link --> " + result[0],print_dt=False)
 
 	def printResultsTeams(self,i,result):
-		Info(str(i) + ") " + bold(result[1][0]) + "\n\t " + result[0],print_dt=False)
+		Info(str(i) + ") " + bold(result[0]) + "\n\t "+ result[1][0] + "\n---------------------------" ,print_dt=False)
 
 	def printResultsSharepoint(self,i,result):
-			res=re.sub(".*\/","",result[0])
-			res=re.sub("%20"," ",res)
-			Info(str(i) + ") " + bold(res) + " -- Link -->  " + result[0],print_dt=False)
+			Info(str(i) + ") " + bold(self.get_sharepoint_display(result[0])) + " -- Link -->  " + result[0],print_dt=False)
+	
+	def get_sharepoint_display(self,result):
+		res=re.sub(".*\/","",result)
+		res=re.sub("%20"," ",res)
+		return res
+		
 
 	def printResultsFindit(self,i,result):
 			Info(str(i) + ") " + result,print_dt=False)
+
+	def search_regexp_teams(self,result,regexs):
+		 ## if downloadurl is none, return false
+		headers={'Authorization': 'Bearer ' + self.token_info['access_token'],
+		"Content-Type" : "application/json"
+		}
+
+		DebugMsg2("search_regexp_teams Regexes %s" % str(regexs))
+		if result[1] is None: 
+			return False
+
+		#pprint.pprint(result)
+		## keywords is added only if some keywords has more than one word
+		keywords=[]
+		for keyword in self.keywords:
+			keyword=keyword.strip()
+			if re.search("\s",keyword) or re.search("\W",keyword):
+				keywords.append(keyword)
+
+		found=False
+		DebugMsg("search_regexp_teams Finding Regexes in Chat")
+		if len(self.__get_regexs + regexs + keywords )> 0:
+			found=False
+#			print(result[1][1])
+			
+			r= requests.get(result[1][1], headers=headers)
+			parsed = parser.from_buffer(r.content)
+			#print(parsed["content"]) # To get the content of the file
+
+			for pattern in self.__get_regexs:
+				#            DebugMsg("Pattern", pattern)
+				found=False
+				
+				s1=re.search(pattern,parsed["content"],re.IGNORECASE)
+				if s1:
+					DebugMsg(result[0],s1.group(0))
+
+
+			for pattern in (regexs + keywords):
+				found=False
+				if re.search(pattern,parsed["content"],re.IGNORECASE):
+					found=True
+				if not found:
+					return False
+		return found
+
 
 	def search_regexp_mail(self,result,regexs):
 		 ## if downloadurl is none, return false
@@ -602,7 +690,9 @@ if __name__ == "__main__":
 	args = argparser.parse_args()
 	# print(args)
 	Logging.debug=args.debug
-	SharepointSearch(keywords=args.keywords,credentialsFile=args.credentialsFile,regexs=args.regex)
+	token='eyJ0eXAiOiJKV1QiLCJub25jZSI6IlhLMEdUWFVZZ1NFVGxHeVB3a001Y2VDcG44U0NmQU1ENklhNjFPeC1aU2MiLCJhbGciOiJSUzI1NiIsIng1dCI6Ii1LSTNROW5OUjdiUm9meG1lWm9YcWJIWkdldyIsImtpZCI6Ii1LSTNROW5OUjdiUm9meG1lWm9YcWJIWkdldyJ9.eyJhdWQiOiIwMDAwMDAwMy0wMDAwLTAwMDAtYzAwMC0wMDAwMDAwMDAwMDAiLCJpc3MiOiJodHRwczovL3N0cy53aW5kb3dzLm5ldC9mMzRlNTk3OS01N2Q5LTRhYWEtYWQ0ZC1iMTIyYTY2MjE4NGQvIiwiaWF0IjoxNjkzNjc2NDU1LCJuYmYiOjE2OTM2NzY0NTUsImV4cCI6MTY5MzY4MjA0NiwiYWNjdCI6MCwiYWNyIjoiMSIsImFpbyI6IkFUUUF5LzhVQUFBQThFLzc2M0JKeEVIcGtMQ2VWNnpuYnNyQkNtWnc4WWx4b1ZDSzQwemtwRU13YjBoQ2ticVdKdG9NbDAvVTRlOVIiLCJhbXIiOlsicHdkIl0sImFwcF9kaXNwbGF5bmFtZSI6IlVuaVNlYXJjaCIsImFwcGlkIjoiZDRkYWM2NDAtNzU0YS00N2I1LTk3ZmYtNWMxMjUyZjgzODZhIiwiYXBwaWRhY3IiOiIwIiwiZmFtaWx5X25hbWUiOiJKaW5kYWwiLCJnaXZlbl9uYW1lIjoiTml0aW4iLCJpZHR5cCI6InVzZXIiLCJpcGFkZHIiOiIyMTcuMTQwLjEwMi4xMyIsIm5hbWUiOiJOaXRpbiBKaW5kYWwiLCJvaWQiOiJkY2Q5ZWYyNS00MGZmLTQ1ZWQtODNhZi1iZDcyNjM1YjI0ZTUiLCJvbnByZW1fc2lkIjoiUy0xLTUtMjEtMTcxNTU2NzgyMS0xNjQ0NDkxOTM3LTcyNTM0NTU0My0xMTI4NzIiLCJwbGF0ZiI6IjgiLCJwdWlkIjoiMTAwMzAwMDA5MTY2RDZGMCIsInJoIjoiMC5BUkFBZVZsTzg5bFhxa3F0VGJFaXBtSVlUUU1BQUFBQUFBQUF3QUFBQUFBQUFBQVFBSFEuIiwic2NwIjoiQWxsU2l0ZXMuTWFuYWdlIEFsbFNpdGVzLlJlYWQgQ2FsZW5kYXJzLlJlYWQgQ2FsZW5kYXJzLlJlYWQuU2hhcmVkIENhbGVuZGFycy5SZWFkV3JpdGUgQ2hhbm5lbE1lc3NhZ2UuUmVhZC5BbGwgQ2hhdC5DcmVhdGUgQ2hhdC5SZWFkIENoYXQuUmVhZEJhc2ljIENoYXQuUmVhZFdyaXRlIENoYXRNZXNzYWdlLlJlYWQgQ2hhdE1lc3NhZ2UuU2VuZCBlbWFpbCBGaWxlcy5SZWFkIEZpbGVzLlJlYWQuQWxsIEZpbGVzLlJlYWQuU2VsZWN0ZWQgRmlsZXMuUmVhZFdyaXRlLkFsbCBNYWlsLlJlYWQgTWFpbC5SZWFkLlNoYXJlZCBNYWlsLlJlYWRCYXNpYyBNYWlsLlJlYWRXcml0ZSBNYWlsLlNlbmQgTXlGaWxlcy5SZWFkIG9wZW5pZCBwcm9maWxlIFByb2plY3QuUmVhZCBTaXRlcy5NYW5hZ2UuQWxsIFNpdGVzLlJlYWQuQWxsIFNpdGVzLlJlYWRXcml0ZS5BbGwgVGVhbS5DcmVhdGUgVGVhbS5SZWFkQmFzaWMuQWxsIFVzZXIuUmVhZCBVc2VyLlJlYWRCYXNpYy5BbGwiLCJzaWduaW5fc3RhdGUiOlsiaW5rbm93bm50d2siLCJrbXNpIl0sInN1YiI6IjNlTE8yN1h1YzBFRjRWNHpxMnVjRHZyZGVQUzd6UGtIRXdwZlRyRzNvRG8iLCJ0ZW5hbnRfcmVnaW9uX3Njb3BlIjoiRVUiLCJ0aWQiOiJmMzRlNTk3OS01N2Q5LTRhYWEtYWQ0ZC1iMTIyYTY2MjE4NGQiLCJ1bmlxdWVfbmFtZSI6Ik5pdGluLkppbmRhbEBhcm0uY29tIiwidXBuIjoiTml0aW4uSmluZGFsQGFybS5jb20iLCJ1dGkiOiIyNzh6UWlTWWZFMnhnZF9HZVp0b0FBIiwidmVyIjoiMS4wIiwid2lkcyI6WyJiNzlmYmY0ZC0zZWY5LTQ2ODktODE0My03NmIxOTRlODU1MDkiXSwieG1zX3N0Ijp7InN1YiI6IjBMNWZaZ0xQVGRvOEZXVEl2eU5FYjhXb3I3YUlKWlZzbF95UFBiak43Sk0ifSwieG1zX3RjZHQiOjE0Mjk3MTM5NTR9.RQvwLiMd38fpKJPuKu8oEyOG9tmg0dBQyQgHlagL8fcaYIajd35dGQ114wTr9aG2ebPWgdp62qU6K4XpbQNos2IHm052mVm5SHfrcF0J1fQc-QSnsEwF5P4W8zLxtylQKS92qzTt7bwDDwfvFsre-RA6_b9aq3bp2dJKhSIrry_3ejzQeCUbJXhiNL_6N221axWb7i9WYYera9ONxZsq2YcHf-ebbdN0smflgQDV9wYTyCx3MtIgqSLS-l4r6-pbg5OPdYEHm7M9ur2KBOte6xFrWsjIYWkWMmpHAbuFikuQZDOoen5nQPOSO8JYNyEWATwYCl5pglghEMMQKmMQ3w'
+	x=SharepointSearch(keywords=args.keywords,token=token)
+	x1=x.get_results()
 
 
 # %%

@@ -115,15 +115,24 @@ class Shared:
 		creds = Encrypt.write_credentials_File(filename,credentials) 
 		return creds
 
-	def updateCredentialsJson(unix_passw=None,conf_token=None,jsondata=None):
+	def updateCredentialsJson(unix_passw=None,conf_token=None,jsondata=None,slack_token=None):
 	#%%
 		if unix_passw is not None:
 			jsondata['Jira']['credentials']['token']=unix_passw
 		if conf_token is not None:
 			jsondata['Confluence']['credentials']['token']=conf_token
+		if slack_token is not None:
+			temp={
+				"Slack" : {
+					"credentials" : {
+						"token" : slack_token
+					}
+				} 
+			}
+			jsondata.update(temp)
 		return jsondata
 
-	def getCredentialsJson(username,email,unix_passw,conf_token,defaults):
+	def getCredentialsJson(username,email,unix_passw,conf_token,slack_token, defaults):
 	#%%
 		jsondata = {
 			"Jira": {
@@ -145,12 +154,17 @@ class Shared:
 					"client_id": defaults['client_id'],
 					"tenant_id": defaults['tenant_id'],
 				}
+			},
+			"Slack": {
+				"credentials": {
+					"token": slack_token,
+				}
 			}
 		}
 		return jsondata
 
-	def CreateCredentialsFile(username,email,unix_passw,confluence_token,defaults,credentialsFile):
-		jsondata=Shared.getCredentialsJson(username,email,unix_passw,confluence_token,defaults)
+	def CreateCredentialsFile(username,email,unix_passw,confluence_token,slack_token,defaults,credentialsFile):
+		jsondata=Shared.getCredentialsJson(username,email,unix_passw,confluence_token,slack_token,defaults)
 		Encrypt.write_credentials_File(credentialsFile,jsondata)
 		
 	def read_credentials(filename,credentialsHead):
@@ -159,11 +173,14 @@ class Shared:
 		if creds is not None:
 			if credentialsHead in creds: 
 				creds=creds[credentialsHead]['credentials']
+			else:
+				creds=None
 		return creds
 
 	def validUnixCredentials(username,unix_passw):
 		defaults=Shared.read_defaults(Shared.defaultsFilePath,"UniSearch")
-		command='ldapwhoami -x -w ' + unix_passw + ' -D uid=' + username + ',ou=' + defaults['Ldapou'] + ',dc=' + defaults['Ldapdc'][0]+ ',dc=' + defaults['Ldapdc'][1] 
+		dirname=os.path.dirname(Shared.defaultsFilePath)
+		command=dirname + '/ldapwhoami -x -w ' + unix_passw + ' -D uid=' + username + ',ou=' + defaults['Ldapou'] + ',dc=' + defaults['Ldapdc'][0]+ ',dc=' + defaults['Ldapdc'][1] 
 		validate_creds = sp.Popen(command.split(), stdout=sp.PIPE, stderr=sp.PIPE)
 		#DebugMsg(validate_creds.stderr.read())
 		#DebugMsg(validate_creds.stdout.read())
@@ -182,6 +199,21 @@ class Shared:
 		filename=os.path.abspath(os.path.expanduser(os.path.expandvars(filename)))
 		with open(filename) as f:
 			defaults= json.load(f)
+			if 'Global' in defaults:
+				if 'local_defaults_file' in defaults['Global']:
+					local_defaults_file=os.path.abspath(os.path.expanduser(os.path.expandvars(defaults['Global']['local_defaults_file'])))
+					if os.path.exists(local_defaults_file):
+						with open(local_defaults_file) as f:
+							local_defaults= json.load(f)
+					
+						if 'Jira' in local_defaults:
+							if  "projects" in local_defaults["Jira"]:
+									defaults["Jira"]["projects"]=local_defaults["Jira"]["projects"]
+						if 'Confluence' in local_defaults:
+							if  "spaces" in local_defaults["Confluence"]:
+								defaults["Confluence"]["spaces"]=local_defaults["Confluence"]["spaces"]
+
+			
 			defaults = defaults[credentialsHead]
 		return defaults
 

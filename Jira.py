@@ -8,6 +8,7 @@ import json
 import functools
 
 
+
 import datetime as dt
 import jira
 from Shared import Logging,DebugMsg,DebugMsg2,Info,Shared,Error,bold,boldr
@@ -27,7 +28,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 class Jira:
 
-	def __init__(self, keywords,regexs=[],commentedBy=[],appendInJquery="",customJquery=None,getregexs=[],credentialsFile=None,credentialsHead=None,max_results=50):
+	def __init__(self, keywords,regexs=[],commentedBy=[],appendInJquery="",customJquery=None,getregexs=[],creds=None,credentialsFile=None,credentialsHead=None,max_results=50):
 		self.max_results=max_results
 
 		defaultsFile = Shared.defaultsFilePath
@@ -39,9 +40,14 @@ class Jira:
 		if credentialsFile is None:
 			credentialsFile = self.defaults["CredentialsFile"]
 
-		self.credentials=Shared.read_credentials(credentialsFile,credentialsHead)
+		if creds is None:
+			self.credentials=Shared.read_credentials(credentialsFile,credentialsHead)
+		else:
+			self.credentials=creds
+  
 		if not Shared.validUnixCredentials(self.credentials["username"],self.credentials["token"]):
 			Error("Invalid Unix Credentials")
+
 
 		if not Shared.isVpnConnected(self.credentials["server"]):
 			return
@@ -51,10 +57,15 @@ class Jira:
 		self.keywords=keywords
 		self.__get_regexs=getregexs
 		DebugMsg("commentedBy=",commentedBy)
-		jql_query=self.create_jql(customJquery,appendInJquery)
+		self.jql_query=self.create_jql(customJquery,appendInJquery)
+		self.regexs=regexs
+		self.combined_results={}
+		issues=self.get_issues_tp(self.jql_query)
+		self.get_matching_issues_tp(issues,self.regexs)
+	
+	def get_results(self):
 		DebugMsg("Search Jira")
-		issues=self.get_issues_tp(jql_query)
-		self.get_matching_issues_tp(issues,regexs)
+		return self.combined_results
 
 
 	def create_jql(self,customJquery=None, appendInJquery=""):
@@ -254,6 +265,8 @@ class Jira:
 
 
 		self.__printIssues(issues,matched_issues,not_matched_issues)
+		self.update_results_json("Jira",matched_issues,"Matched")
+		self.update_results_json("Jira", not_matched_issues,"NotMatched")
 
 	def get_matching_issues_mt(self,issues,regexs):
 		matched_issues=[]
@@ -293,6 +306,16 @@ class Jira:
 			else:
 				not_matched_issues.append(issue)
 		self.__printIssues(issues,matched_issues,not_matched_issues)
+
+	def update_results_json(self,source,results,subcategory):
+		if source not in self.combined_results:
+			self.combined_results[source]={}
+		
+		if subcategory not in self.combined_results[source]:
+			self.combined_results[source][subcategory]=[]
+
+		for result in results:
+			self.combined_results[source][subcategory].append({ "Subject" : re.sub(".*\/","",result.permalink()) + ": " + result.fields.summary, 'Summary' : ""  , 'Link' : result.permalink()})
 
 	def __printIssues(self,issues,matched_issues,not_matched_issues):
 		header=""
